@@ -1,0 +1,321 @@
+# CampusKart 🛒
+
+A campus-based peer-to-peer marketplace for buying and selling used items among students.
+
+## 📖 Quick Links
+
+- **GitHub Repository:** https://github.com/kushalgowdac/campus_kart.git
+- **Project Progress:** See [PROGRESS.md](PROGRESS.md) for current status and what's completed
+- **Task List:** See [FRONTEND_TASKS.md](FRONTEND_TASKS.md) for frontend development tasks
+- **Requirements:** See [REQUIREMENTS.md](REQUIREMENTS.md) for detailed specifications
+
+---
+
+## 🎯 Project Status
+
+| Component | Status | Coverage |
+|-----------|--------|----------|
+| **Database Schema** | ✅ Complete | 100% - Ready for use |
+| **Backend API** | 🔄 In Progress | 80% - Routes/Controllers need completion |
+| **Frontend** | 🔄 In Progress | 40% - Basic setup done, pages needed |
+| **Testing** | ⏳ Not Started | 0% - To be done |
+
+See [PROGRESS.md](PROGRESS.md) for detailed breakdown.
+
+---
+
+## 🏗️ Architecture
+
+### Database (MySQL)
+- Users, Products, Transactions, Wishlist
+- Product metadata (specs, images, locations)
+- ER diagram compliant schema
+- Enforced constraints and relationships
+
+### Backend (Node.js + Express)
+- RESTful API endpoints
+- Database connection pooling
+- MongoDB for chat (optional)
+- Organized routes and controllers
+
+### Frontend (React + Vite)
+- Modern SPA architecture
+- Component-based UI
+- API integration layer
+- Real-time updates ready
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+```bash
+- Node.js 16+ 
+- MySQL 8.x (local or remote)
+- Git
+```
+
+### Backend Setup
+
+```bash
+cd backend
+npm install
+
+# Create .env file
+cat > .env << EOF
+PORT=3000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=campuskart
+MONGODB_URI=mongodb://localhost:27017/campuskart
+EOF
+
+# Initialize database
+mysql -u root -p < ../database/schema.sql
+
+# Start server
+npm start
+```
+
+**Verify:** `curl http://localhost:3000/` (should return "CampusKart API is running")
+
+### Frontend Setup
+
+```bash
+cd frontend
+npm install
+
+# Create .env (if needed)
+# VITE_API_URL=http://localhost:3000/api
+
+# Start dev server
+npm run dev
+```
+
+**Access:** http://localhost:5173 (or port shown in terminal)
+
+---
+
+## 📚 Database Schema
+
+### Core Tables
+- **users** - User profiles (uid, name, email, password)
+- **products** - Product listings (pid, pname, category, price, status, etc.)
+- **product_seller** - Maps products to sellers
+- **transaction** - Purchase records
+- **add_to_wishlist** - Wishlist entries
+
+### Metadata Tables
+- **prod_spec** - Product specifications (key-value pairs)
+- **prod_img** - Product image URLs
+- **prod_loc** - Pickup locations
+
+See [database/schema.sql](database/schema.sql) for complete schema.
+
+---
+
+## 🔗 API Routes
+
+### Base URL: `/api`
+
+| Resource | Endpoints | Status |
+|----------|-----------|--------|
+| Users | `GET/POST/PUT/DELETE /users` | 🔄 Partial |
+| Products | `GET/POST/PUT/DELETE /products` | 🔄 Partial |
+| Product Specs | `GET/POST /product-specs` | 🔄 Partial |
+| Product Images | `GET/POST /product-images` | 🔄 Partial |
+| Product Locations | `GET/POST /product-locations` | 🔄 Partial |
+| Wishlist | `GET/POST/DELETE /wishlist` | 🔄 Partial |
+| Transactions | `GET/POST /transactions` | 🔄 Partial |
+| Chats | `GET/POST /chats` | 🔄 Partial |
+
+See backend controller files for current implementation.
+
+---
+
+## 📁 Project Structure
+
+```
+CampusKart/
+├── backend/                           # Express API server
+│   ├── src/
+│   │   ├── app.js                    # Entry point
+│   │   ├── db/
+│   │   │   ├── index.js              # MySQL pool
+│   │   │   └── mongo.js              # MongoDB connection
+│   │   ├── controllers/              # Business logic
+│   │   ├── routes/                   # API endpoints
+│   │   └── models/                   # Data models
+│   └── package.json
+│
+├── frontend/                          # React Vite app
+│   ├── src/
+│   │   ├── App.jsx                   # Main component
+│   │   ├── api.js                    # API client
+│   │   └── styles.css                # Global styles
+│   ├── index.html
+│   └── package.json
+│
+├── database/                          # SQL scripts
+│   ├── schema.sql                    # Database schema
+│   ├── seed.sql                      # Sample data
+│   └── ...
+│
+├── PROGRESS.md                        # ⭐ Current status & next steps
+├── REQUIREMENTS.md                    # Functional requirements
+├── FRONTEND_TASKS.md                  # Frontend development tasks
+└── README.md                          # This file
+```
+
+---
+
+## ✨ Key Features (Roadmap)
+
+### ✅ Completed
+- Database schema (MySQL)
+- Express API scaffolding
+- React project setup
+- Environment configuration
+
+### 🔄 In Progress
+- API controller implementations
+- Frontend pages and components
+- Authentication & authorization
+- Form validation
+
+### ⏳ Not Started
+- Comprehensive testing
+- Production deployment config
+- CI/CD pipeline
+- API documentation (Swagger)
+
+---
+
+## 🛠️ Development Workflow
+
+### Adding a New Endpoint
+
+1. **Create Route Handler** → `backend/src/routes/resource.js`
+2. **Create Controller Logic** → `backend/src/controllers/resourceController.js`
+3. **Add Database Queries** → Use MySQL pool from `db/index.js`
+4. **Register Route** → Import in `app.js`
+
+### Adding a Frontend Page
+
+1. **Create Component** → `frontend/src/pages/ResourcePage.jsx`
+2. **Add API Call** → Use functions from `api.js`
+3. **Add Route** → Update app routing (when React Router is added)
+4. **Style Components** → Use global `styles.css` or component CSS
+
+---
+
+## 🔒 Important Notes
+
+### Database
+- ✅ Follow the ER diagram strictly
+- ✅ All tables and relationships are predefined
+- ✅ Do NOT modify schema without team discussion
+- ✅ Use transactions for multi-step operations
+
+### API
+- Use async/await for database operations
+- Always validate and sanitize inputs
+- Follow REST conventions
+- Return meaningful error messages
+
+### Frontend
+- Use React best practices
+- Keep components small and reusable
+- Handle loading and error states
+- Mobile-responsive design
+
+---
+
+## 📝 Environment Variables
+
+### Backend (.env)
+```env
+PORT=3000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=password
+DB_NAME=campuskart
+MONGODB_URI=mongodb://localhost:27017/campuskart
+NODE_ENV=development
+```
+
+### Frontend (.env)
+```env
+VITE_API_URL=http://localhost:3000/api
+```
+
+---
+
+## 🤝 Team Handoff
+
+This project is ready for the next developer. All groundwork is in place:
+
+1. **Database** is fully designed and ready
+2. **Backend routes** are scaffolded and awaiting controller implementation
+3. **Frontend** is initialized with build tooling ready
+
+**Next developer focus:**
+- Complete backend controller functions
+- Build React components and pages
+- Integrate frontend with API
+- Add authentication
+- Comprehensive testing
+
+See [PROGRESS.md](PROGRESS.md) for detailed next steps.
+
+---
+
+## 🚀 Commands
+
+### Backend
+```bash
+cd backend
+npm install    # Install dependencies
+npm start      # Start server (port 3000)
+npm test       # Run tests (when added)
+```
+
+### Frontend
+```bash
+cd frontend
+npm install    # Install dependencies
+npm run dev    # Start dev server (port 5173)
+npm run build  # Build for production
+npm run preview # Preview production build
+```
+
+### Database
+```bash
+# Initialize
+mysql -u root -p < database/schema.sql
+
+# Seed data
+mysql -u root -p campuskart < database/seed.sql
+```
+
+---
+
+## 📞 Support & Questions
+
+Refer to:
+- [PROGRESS.md](PROGRESS.md) - For current status and detailed next steps
+- [REQUIREMENTS.md](REQUIREMENTS.md) - For functional requirements
+- [FRONTEND_TASKS.md](FRONTEND_TASKS.md) - For frontend development guide
+
+---
+
+## 📄 License
+
+ISC License - See LICENSE file (if included)
+
+---
+
+**Built with ❤️ for the campus community**
+
+Last Updated: January 21, 2026
