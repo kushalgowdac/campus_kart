@@ -25,6 +25,16 @@ export const addWishlistItem = async (req, res, next) => {
       return res.status(400).json({ error: "uid, pid required" });
     }
 
+    // Check if item already exists in wishlist
+    const [existing] = await pool.query(
+      "SELECT * FROM add_to_wishlist WHERE uid = ? AND pid = ?",
+      [uid, pid]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: "Item already in wishlist" });
+    }
+
     await pool.query("INSERT INTO add_to_wishlist (uid, pid) VALUES (?, ?)", [
       uid,
       pid,

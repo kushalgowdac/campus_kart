@@ -13,6 +13,11 @@ export const fetchProducts = async (query = "") => {
   return handle(res);
 };
 
+export const fetchProductById = async (id) => {
+  const res = await fetch(`${API_URL}/api/products/${id}`);
+  return handle(res);
+};
+
 export const fetchUsers = async () => {
   const res = await fetch(`${API_URL}/api/users`);
   return handle(res);
@@ -59,6 +64,30 @@ export const createTransaction = async (payload) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+  return handle(res);
+};
+
+export const fetchTransactions = async (query = "") => {
+  const res = await fetch(`${API_URL}/api/transactions${query}`);
+  return handle(res);
+};
+
+export const deleteProduct = async (pid) => {
+  const res = await fetch(`${API_URL}/api/products/${pid}`, {
+    method: "DELETE"
+  });
+  return handle(res);
+};
+
+export const fetchWishlist = async (uid) => {
+  const res = await fetch(`${API_URL}/api/wishlist?uid=${uid}`);
+  return handle(res);
+};
+
+export const removeWishlistItem = async (uid, pid) => {
+  const res = await fetch(`${API_URL}/api/wishlist/${uid}/${pid}`, {
+    method: "DELETE"
   });
   return handle(res);
 };

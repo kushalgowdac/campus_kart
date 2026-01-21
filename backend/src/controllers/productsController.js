@@ -174,6 +174,19 @@ export const updateProduct = async (req, res, next) => {
 export const deleteProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Check if product has any transactions
+    const [transactions] = await pool.query(
+      "SELECT COUNT(*) as count FROM `transaction` WHERE pid = ?",
+      [id]
+    );
+
+    if (transactions[0].count > 0) {
+      return res.status(400).json({
+        error: "Cannot delete product with existing transactions. Please contact support if you need to remove this listing."
+      });
+    }
+
     const [result] = await pool.query("DELETE FROM products WHERE pid = ?", [
       id,
     ]);

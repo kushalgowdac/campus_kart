@@ -2,9 +2,9 @@ import { pool } from "../db/index.js";
 
 export const listTransactions = async (req, res, next) => {
   try {
-    const { buyerid, pid, status } = req.query;
+    const { buyerid, pid, status, sellerid } = req.query;
     let sql =
-      "SELECT t.tid, t.buyerid, t.pid, t.quantity, t.status, t.time_of_purchase, p.pname FROM `transaction` t LEFT JOIN products p ON t.pid = p.pid WHERE 1=1";
+      "SELECT t.tid, t.buyerid, t.pid, t.quantity, t.status, t.time_of_purchase, p.pname, p.price, ps.sellerid FROM `transaction` t LEFT JOIN products p ON t.pid = p.pid LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE 1=1";
     const params = [];
 
     if (buyerid) {
@@ -19,6 +19,13 @@ export const listTransactions = async (req, res, next) => {
       sql += " AND t.status = ?";
       params.push(status);
     }
+    if (sellerid) {
+      sql += " AND ps.sellerid = ?";
+      params.push(sellerid);
+    }
+
+    // Order by newest first
+    sql += " ORDER BY t.time_of_purchase DESC";
 
     const [rows] = await pool.query(sql, params);
     res.json(rows);
