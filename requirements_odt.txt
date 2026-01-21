@@ -1,0 +1,42 @@
+
+RV College of Engineering®, Bengaluru – 59
+Department of Computer Science and Engineering
+DATABASE MANAGEMENT SYSTEMS (CD252IA) 
+
+Synopsis
+TITLE : Campus Kart – A Database-Driven Marketplace for Academic Utilities 
+TEAM
+USN:
+Name
+1RV23CS117
+Kushal Gowda C
+1RV23CS098
+Harshith Kumar S.B.
+
+
+
+Students frequently buy or sell used academic items such as calculators, lab coats, and textbooks. These exchanges often occur informally through chats or notice boards, leading to inefficiency, duplication, and lack of trust.
+Campus Kart is a full-stack web application developed using the MERN stack (MySQL, Express.js, React.js, and Node.js). The system focuses on relational database design and seamless integration with MongoDB for handling non-relational data such as chat messages and product images. This dual-database design demonstrates both RDBMS and NoSQL concepts covered in the DBMS course.	
+Currently, there is no centralized mechanism for managing student listings. Exchanges rely on social media groups or notice boards, which lack data consistency, search capability, and verification. There is no structured record of orders, payments, or feedback, and no analytics to identify popular items or sellers.
+The proposed system introduces a relational database–driven marketplace that centralizes listings, orders, and user data.
+Key database-driven features include: 
+Normalized schema (≥ 5 tables: Users, Products, Categories, Orders, Transactions).
+Foreign-key–based relationships ensuring referential integrity.
+SQL triggers for automatic stock updates and procedures for seller-wise reports.
+The RESTful architecture supports CRUD operations and seamless integration between relational and NoSQL components, enabling hybrid data management — transactional data in MySQL and unstructured or real-time data (like chat logs) in MongoDB. 
+
+The relational model consists of the following major entities:
+Users: (user_id PK, name, email, role)
+Categories: (category_id PK, category_name)
+Products: (product_id PK, name, price, seller_id FK, category_id FK, status)
+Orders: (order_id PK, buyer_id FK, product_id FK, total_amount, date)
+Transactions: (txn_id PK, order_id FK, method, status)
+Relationships: Users ↔ Products (1:M), Products ↔ Orders (1:M), Orders ↔ Transactions (1:1).
+The schema follows 3NF, eliminating redundancy and ensuring consistency across all modules.
+The system integrates MySQL (RDBMS) and MongoDB (NoSQL) to leverage the strengths of both models.
+MySQL: Stores structured, transactional data such as user profiles, listings, and payments.
+MongoDB: Manages semi-structured data such as chat messages, images, and logs.
+The backend (Node.js + Express) connects both databases through APIs. When a user interacts, MySQL handles core transactions while MongoDB manages unstructured data, achieving consistency and scalability.
+
+The project supports sustainability and circular-economy principles by reducing campus e-waste and encouraging responsible reuse of materials, aligning with UN SDG 9 – Sustainable Infrastructure.
+In the future, AI-based price prediction and NLP - powered smart search can enhance usability and decision-making, making the platform both intelligent and socially responsible.
