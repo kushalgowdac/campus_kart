@@ -1,6 +1,8 @@
 import { pool } from "../db/index.js";
 import bcrypt from "bcrypt";
 
+
+
 export const listProducts = async (req, res, next) => {
   try {
     const { category, sellerid, status, q } = req.query;
@@ -37,7 +39,7 @@ export const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?",
+      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, p.reschedule_requested_by, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?",
       [id]
     );
     if (rows.length === 0) {
@@ -282,6 +284,14 @@ export const confirmMeet = async (req, res, next) => {
       });
     }
 
+    // 🔴 GLOBAL BLOCKING RULE: No actions if reschedule requested
+    if (product[0].reschedule_requested_by) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: "Action blocked: Reschedule requested. Please accept or reject the request."
+      });
+    }
+
     if (product[0].reserved_by !== buyerId) {
       await connection.rollback();
       return res.status(403).json({ error: "Unauthorized: Only buyer who reserved can confirm meet" });
@@ -395,12 +405,198 @@ export const cancelReservation = async (req, res, next) => {
 
     // Reset product
     await connection.query(
-      "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL WHERE pid = ?",
+      "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ?",
       [id]
     );
 
     await connection.commit();
     res.json({ message: "Reservation cancelled" });
+
+  } catch (err) {
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+};
+
+export const rescheduleProduct = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  console.log(`[Reschedule] Request for pid: ${req.params.id}, User: ${req.user?.uid}`);
+  try {
+    const { id } = req.params;
+    const userId = req.user?.uid;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    await connection.beginTransaction();
+
+    // Lock Row
+    const [product] = await connection.query(
+      "SELECT p.*, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ? FOR UPDATE",
+      [id]
+    );
+
+    if (product.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const currentStatus = product[0].status;
+    const sellerId = product[0].sellerid;
+    const reservedBy = product[0].reserved_by;
+    const requestedBy = product[0].reschedule_requested_by;
+
+    // Authorization
+    if (sellerId !== userId && reservedBy !== userId) {
+      await connection.rollback();
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    // Only allow reschedule if in active meeting flow
+    if (!['location_selected', 'otp_generated'].includes(currentStatus)) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: `Cannot reschedule in '${currentStatus}' state. Only allowed during active meeting.`
+      });
+    }
+
+    // Logic Branch: Request vs Confirm
+    if (requestedBy !== null) {
+      // A request already exists
+      if (String(requestedBy) === String(userId)) {
+        await connection.rollback();
+        return res.status(400).json({ error: "You have already requested to reschedule. Waiting for other party." });
+      } else {
+        // Other party requested -> CONFIRM & RESET
+        console.log("[Reschedule] Request confirmed by other party. Executing reset...");
+
+        // 1. Invalidate OTPs
+        await connection.query("UPDATE otp_tokens SET used = true WHERE product_id = ? AND used = false", [id]);
+
+        // 2. Clear Location
+        await connection.query("UPDATE prod_loc SET is_selected = false WHERE pid = ?", [id]);
+
+        // 3. Reset Product
+        await connection.query(
+          "UPDATE products SET status = 'reserved', reschedule_requested_by = NULL WHERE pid = ?",
+          [id]
+        );
+
+        await connection.commit();
+        return res.json({
+          success: true,
+          status: 'confirmed',
+          message: "Reschedule request accepted. Meeting details have been reset."
+        });
+      }
+    } else {
+      // No request exists -> INITIATE REQUEST
+      console.log("[Reschedule] Initiating new request...");
+
+      await connection.query(
+        "UPDATE products SET reschedule_requested_by = ? WHERE pid = ?",
+        [userId, id]
+      );
+
+      await connection.commit();
+      return res.json({
+        success: true,
+        status: 'requested',
+        message: "Reschedule requested. Waiting for the other party to accept."
+      });
+    }
+
+  } catch (err) {
+    console.error("[Reschedule] Error:", err);
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+};
+
+export const rejectReschedule = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const userId = req.user?.uid;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    await connection.beginTransaction();
+
+    // Fetch product details with lock
+    const [product] = await connection.query(
+      "SELECT p.status, p.reserved_by, p.reschedule_requested_by, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ? FOR UPDATE",
+      [id]
+    );
+
+    if (product.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const reservedBy = product[0].reserved_by;
+    const sellerId = product[0].sellerid;
+    const requestedBy = product[0].reschedule_requested_by;
+
+    // Authorization
+    if (sellerId !== userId && reservedBy !== userId) {
+      await connection.rollback();
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    if (requestedBy === null) {
+      await connection.rollback();
+      return res.status(400).json({ error: "No reschedule request pending" });
+    }
+
+    // STRICT RULE: If Buyer is rejecting a request from Seller -> CANCEL TRANSACTION
+    const isBuyer = String(userId) === String(reservedBy);
+    const requestFromSeller = String(requestedBy) === String(sellerId);
+
+    console.log(`[Reject Debug] User:${userId} Reserved:${reservedBy} ReqBy:${requestedBy} Seller:${sellerId}`);
+    console.log(`[Reject Debug] IsBuyer:${isBuyer} ReqFromSeller:${requestFromSeller}`);
+
+    if (isBuyer && requestFromSeller) {
+      console.log("[Reject Reschedule] Buyer rejected Seller's request. Executing FULL CANCELLATION.");
+
+      // 1. Reset Location
+      await connection.query("UPDATE prod_loc SET is_selected = false WHERE pid = ?", [id]);
+
+      // 2. Clear OTPs
+      await connection.query("UPDATE otp_tokens SET used = true WHERE product_id = ? AND used = false", [id]);
+
+      // 3. FULL CANCEL
+      await connection.query(
+        "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ?",
+        [id]
+      );
+
+      await connection.commit();
+      return res.json({
+        message: "Reschedule rejected. Transaction has been cancelled and product is now available.",
+        action: "cancelled"
+      });
+
+    } else {
+      // Default: Just clear the flag
+      console.log("[Reject Reschedule] Clearing reschedule request flag only.");
+      await connection.query(
+        "UPDATE products SET reschedule_requested_by = NULL WHERE pid = ?",
+        [id]
+      );
+      await connection.commit();
+      return res.json({
+        message: "Reschedule request cancelled.",
+        action: "cleared"
+      });
+    }
 
   } catch (err) {
     await connection.rollback();

@@ -67,6 +67,14 @@ export const verifyOTP = async (req, res, next) => {
 
         const product = productRows[0];
 
+        // 🔴 GLOBAL BLOCKING RULE: No actions if reschedule requested
+        if (product.reschedule_requested_by) {
+            await conn.rollback();
+            return res.status(400).json({
+                error: "Action blocked: Reschedule requested. Please accept or reject the request."
+            });
+        }
+
         // 🔴 FIX 3: Verify seller authorization
         if (product.sellerid !== sellerId) {
             await conn.rollback();

@@ -27,10 +27,15 @@ export async function cleanupExpiredOTPs() {
             "DELETE FROM prod_loc WHERE pid IN (SELECT pid FROM products WHERE status = 'available')"
         );
 
+        // 🔴 FIX 2: Auto-clear stale reschedule requests (>30 mins)
+        const [staleRequestResult] = await conn.query(
+            "UPDATE products SET reschedule_requested_by = NULL WHERE reschedule_requested_by IS NOT NULL AND reserved_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
+        );
+
         await conn.commit();
 
-        if (otpResult.affectedRows > 0 || productResult.affectedRows > 0 || locResult.affectedRows > 0) {
-            console.log(`[Cleanup] Expired ${otpResult.affectedRows} OTPs, reset ${productResult.affectedRows} products, cleaned ${locResult.affectedRows} location entries`);
+        if (otpResult.affectedRows > 0 || productResult.affectedRows > 0 || locResult.affectedRows > 0 || staleRequestResult.affectedRows > 0) {
+            console.log(`[Cleanup] Expired ${otpResult.affectedRows} OTPs, reset ${productResult.affectedRows} products, cleaned ${locResult.affectedRows} locs, cleared ${staleRequestResult.affectedRows} stale requests`);
         }
     } catch (err) {
         await conn.rollback();

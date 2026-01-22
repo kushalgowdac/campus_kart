@@ -8,6 +8,8 @@ import {
   reserveProduct,
   confirmMeet,
   cancelReservation,
+  rescheduleProduct,
+  rejectReschedule,
 } from "../controllers/productsController.js";
 
 const router = Router();
@@ -29,6 +31,8 @@ router.post("/test", (req, res) => {
 router.post("/:id/reserve", reserveProduct);
 router.post("/:id/confirm-meet", confirmMeet);
 router.post("/:id/cancel", cancelReservation);
+router.post("/:id/reschedule", rescheduleProduct);
+router.post("/:id/reschedule/reject", rejectReschedule);
 
 // Standard CRUD
 router.get("/", listProducts);

@@ -57,6 +57,14 @@ export const createLocations = async (req, res, next) => {
             });
         }
 
+        // 🔴 GLOBAL BLOCKING RULE: No actions if reschedule requested
+        if (product[0].reschedule_requested_by) {
+            await conn.rollback();
+            return res.status(400).json({
+                error: "Action blocked: Reschedule requested. Please accept or reject the request."
+            });
+        }
+
         // 2. Delete existing locations if any (reset)
         await conn.query("DELETE FROM prod_loc WHERE pid = ?", [pid]);
 
@@ -153,7 +161,7 @@ export const selectLocation = async (req, res, next) => {
 
         // Lock and verify product
         const [product] = await conn.query(
-            'SELECT pid, status, reserved_by FROM products WHERE pid = ? FOR UPDATE',
+            'SELECT pid, status, reserved_by, reschedule_requested_by FROM products WHERE pid = ? FOR UPDATE',
             [pid]
         );
 
@@ -175,6 +183,16 @@ export const selectLocation = async (req, res, next) => {
                 error: `Locations must be proposed first. Current status: ${product[0].status}`
             });
         }
+
+        // 🔴 GLOBAL BLOCKING RULE: No actions if reschedule requested
+        if (product[0].reschedule_requested_by) {
+            await conn.rollback();
+            return res.status(400).json({
+                error: "Action blocked: Reschedule requested. Please accept or reject the request."
+            });
+        } // Wait, I need to make sure I selected this column or used select * logic. 
+        // The original query was: SELECT pid, status, reserved_by FROM products...
+        // I need to update the query to include reschedule_requested_by first.
 
         // Verify the selected location exists in prod_loc
         const [locationExists] = await conn.query(

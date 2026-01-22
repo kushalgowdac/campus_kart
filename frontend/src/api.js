@@ -112,6 +112,16 @@ export const cancelReservation = async (pid) => {
   return handle(res);
 };
 
+export const rescheduleProduct = async (pid) => {
+  const res = await fetch(`${API_URL}/api/products/${pid}/reschedule`, getConfig("POST", {}));
+  return handle(res);
+};
+
+export const rejectReschedule = async (pid) => {
+  const res = await fetch(`${API_URL}/api/products/${pid}/reschedule/reject`, getConfig("POST", {}));
+  return handle(res);
+};
+
 // Location Selection Flow
 export const createLocations = async (pid, locations) => {
   const res = await fetch(`${API_URL}/api/locations/${pid}`, getConfig("POST", { locations }));
