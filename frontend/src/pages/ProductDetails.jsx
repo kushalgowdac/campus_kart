@@ -1,8 +1,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { fetchProductById, addWishlist, createTransaction } from "../api";
+import { fetchProductById, addWishlist, reserveProduct, getLocations } from "../api";
 import { useAuth } from "../context/AuthContext";
+import BuyerOTPDisplay from "../components/BuyerOTPDisplay";
+import SellerOTPInput from "../components/SellerOTPInput";
+import SellerLocationProposal from "../components/SellerLocationProposal";
+import BuyerLocationSelector from "../components/BuyerLocationSelector";
 
 export default function ProductDetails() {
     const { id } = useParams();
@@ -12,6 +16,8 @@ export default function ProductDetails() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [status, setStatus] = useState({ type: "", message: "" });
+    const [selectedLocation, setSelectedLocation] = useState(null);
+    const [selectedTime, setSelectedTime] = useState(null);
 
     useEffect(() => {
         const load = async () => {
@@ -27,6 +33,29 @@ export default function ProductDetails() {
         load();
     }, [id]);
 
+    const refreshProduct = async () => {
+        try {
+            const updated = await fetchProductById(id);
+            setProduct(updated);
+
+            // Fetch selected location if product is in location_selected or otp_generated state
+            if (['location_selected', 'otp_generated'].includes(updated.status)) {
+                try {
+                    const locs = await getLocations(updated.pid);
+                    const selected = locs.find(l => l.is_selected);
+                    if (selected) {
+                        setSelectedLocation(selected.location);
+                        setSelectedTime(selected.meeting_time);
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch selected location', err);
+                }
+            }
+        } catch (err) {
+            console.error("Failed to refresh product", err);
+        }
+    };
+
     const handleWishlist = async () => {
         try {
             await addWishlist({ uid: currentUser.uid, pid: product.pid });
@@ -36,20 +65,17 @@ export default function ProductDetails() {
         }
     };
 
-    const handleBuy = async () => {
-        if (!window.confirm(`Buy ${product.pname} for ₹${product.price}?`)) return;
+    const handleReserve = async () => {
+        if (!currentUser) {
+            alert("Please login to reserve products.");
+            return;
+        }
+        if (!window.confirm(`Reserve ${product.pname}? You will need to meet the seller to complete the purchase.`)) return;
+
         try {
-            await createTransaction({
-                buyerid: currentUser.uid,
-                pid: product.pid,
-                quantity: 1,
-                status: "completed",
-            });
-            setStatus({ type: "success", message: "Purchase successful!" });
-            // Refresh product to see status change? or navigate back?
-            // navigate('/');
-            const updated = await fetchProductById(id);
-            setProduct(updated);
+            await reserveProduct(product.pid);
+            setStatus({ type: "success", message: "Product reserved! Proceed to meet the seller." });
+            refreshProduct();
         } catch (err) {
             setStatus({ type: "error", message: err.message });
         }
@@ -67,6 +93,13 @@ export default function ProductDetails() {
 
             {status.message && (
                 <div className={`status ${status.type}`}>{status.message}</div>
+            )}
+
+            {/* DEBUG INFO - REMOVE LATER */}
+            {currentUser && (
+                <div style={{ background: '#eee', padding: '5px', fontSize: '12px', marginBottom: '10px', border: '1px solid #ccc' }}>
+                    👤 <strong>Debug:</strong> You are logged in as <strong>{currentUser.name} (ID: {currentUser.uid})</strong>
+                </div>
             )}
 
             <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
@@ -99,13 +132,72 @@ export default function ProductDetails() {
                So we might not see specs here yet unless we update the controller.
            */}
 
-                    <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                        {product.status === 'available' ? (
-                            <>
-                                <button onClick={handleBuy}>Buy Now</button>
+                    <div style={{ marginTop: '2rem' }}>
+                        {/* Action Buttons Area */}
+
+                        {/* 1. Available State */}
+                        {product.status === 'available' && (
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                {currentUser && product.sellerid !== currentUser.uid ? (
+                                    <button onClick={handleReserve} className="primary">Reserve to Buy</button>
+                                ) : (
+                                    product.sellerid === currentUser?.uid && <span className="muted">Your listed product</span>
+                                )}
                                 <button className="secondary" onClick={handleWishlist}>Add to Wishlist</button>
+                            </div>
+                        )}
+
+                        {/* 2. Reserved State - Seller proposes locations */}
+                        {product.status === 'reserved' && currentUser && product.sellerid === currentUser.uid && (
+                            <SellerLocationProposal product={product} onUpdate={refreshProduct} />
+                        )}
+
+                        {/* 3. Location Proposed - Buyer selects location */}
+                        {product.status === 'location_proposed' && currentUser && product.reserved_by === currentUser.uid && (
+                            <BuyerLocationSelector product={product} onUpdate={refreshProduct} />
+                        )}
+
+                        {/* 4. Location Selected - Show selected location */}
+                        {product.status === 'location_selected' && selectedLocation && (
+                            <div className="card" style={{ marginTop: '1rem', border: '1px solid #4CAF50' }}>
+                                <h3>✓ Meeting Location Confirmed</h3>
+                                <p style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}><strong>{selectedLocation}</strong></p>
+                                {selectedTime && (
+                                    <p style={{ fontSize: '1.1rem', color: '#555', marginBottom: '0.5rem' }}>
+                                        🕒 {selectedTime}
+                                    </p>
+                                )}
+                                {currentUser && product.reserved_by === currentUser.uid && (
+                                    <p className="muted">Ready to generate OTP below</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 5. Location Selected / OTP Generated - Buyer and Seller Views */}
+                        {(['location_selected', 'otp_generated'].includes(product.status) && currentUser) && (
+                            <>
+                                {/* Buyer View - OTP Display */}
+                                {product.reserved_by === currentUser.uid && (
+                                    <BuyerOTPDisplay product={product} onUpdate={refreshProduct} />
+                                )}
+
+                                {/* Seller View - OTP Input */}
+                                {product.sellerid === currentUser.uid && product.status === 'otp_generated' && (
+                                    <SellerOTPInput product={product} onUpdate={refreshProduct} />
+                                )}
+
+                                {/* Seller waiting message */}
+                                {product.sellerid === currentUser.uid && product.status === 'location_selected' && (
+                                    <div className="card" style={{ border: '1px dashed #ffa500', marginTop: '1rem' }}>
+                                        <h4>Location Confirmed</h4>
+                                        <p>Waiting for buyer to generate OTP...</p>
+                                    </div>
+                                )}
                             </>
-                        ) : (
+                        )}
+
+                        {/* 6. Sold State */}
+                        {product.status === 'sold' && (
                             <button disabled>Sold Out</button>
                         )}
                     </div>

@@ -1,11 +1,12 @@
 import { pool } from "../db/index.js";
+import bcrypt from "bcrypt";
 
 export const listProducts = async (req, res, next) => {
   try {
     const { category, sellerid, status, q } = req.query;
 
     let sql =
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
+      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
     const params = [];
 
     if (category) {
@@ -36,7 +37,7 @@ export const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?",
+      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?",
       [id]
     );
     if (rows.length === 0) {
@@ -196,5 +197,215 @@ export const deleteProduct = async (req, res, next) => {
     res.json({ message: "Product deleted" });
   } catch (err) {
     next(err);
+  }
+};
+
+// OTP Flow Methods
+
+export const reserveProduct = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const buyerId = req.user?.uid;
+
+    if (!buyerId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    await connection.beginTransaction();
+
+    const [product] = await connection.query(
+      "SELECT * FROM products WHERE pid = ? FOR UPDATE",
+      [id]
+    );
+
+    if (product.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    if (product[0].status !== "available") {
+      await connection.rollback();
+      return res.status(400).json({
+        error: `Product not available (current status: ${product[0].status})`
+      });
+    }
+
+    // Update status to reserved
+    await connection.query(
+      "UPDATE products SET status = 'reserved', reserved_by = ?, reserved_at = NOW() WHERE pid = ?",
+      [buyerId, id]
+    );
+
+    await connection.commit();
+    res.json({
+      status: "reserved",
+      reserved_by: buyerId,
+      message: "Product reserved. Please meet seller to confirm."
+    });
+
+  } catch (err) {
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+};
+
+export const confirmMeet = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const buyerId = req.user?.uid;
+
+    if (!buyerId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    await connection.beginTransaction();
+
+    // Lock product
+    const [product] = await connection.query(
+      "SELECT * FROM products WHERE pid = ? FOR UPDATE",
+      [id]
+    );
+
+    if (product.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    if (product[0].status !== "location_selected") {
+      await connection.rollback();
+      return res.status(400).json({
+        error: `OTP generation requires location selection. Current status: ${product[0].status}`
+      });
+    }
+
+    if (product[0].reserved_by !== buyerId) {
+      await connection.rollback();
+      return res.status(403).json({ error: "Unauthorized: Only buyer who reserved can confirm meet" });
+    }
+
+    // Double validation: Verify a location has been selected
+    const [selectedLocation] = await connection.query(
+      "SELECT location FROM prod_loc WHERE pid = ? AND is_selected = true",
+      [id]
+    );
+
+    if (selectedLocation.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: "No location selected. Please select a meeting location first."
+      });
+    }
+
+    // SINGLE ACTIVE OTP ENFORCEMENT
+    const [existingOTP] = await connection.query(
+      "SELECT otp_id, expires_at FROM otp_tokens WHERE product_id = ? AND used = false AND expires_at > NOW()",
+      [id]
+    );
+
+    if (existingOTP.length > 0) {
+      const timeRemaining = Math.floor((new Date(existingOTP[0].expires_at) - new Date()) / 1000);
+      await connection.commit();
+      return res.json({
+        message: "OTP already generated",
+        expiresIn: timeRemaining,
+        note: "Use existing OTP or wait for expiration"
+      });
+    }
+
+    // Generate and Hash OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = await bcrypt.hash(otp, 10);
+
+    // Get seller ID from product_seller
+    const [seller] = await connection.query(
+      "SELECT sellerid FROM product_seller WHERE pid = ?",
+      [id]
+    );
+
+    if (seller.length === 0) {
+      await connection.rollback();
+      return res.status(500).json({ error: "Product has no seller" });
+    }
+
+    // Store OTP
+    await connection.query(
+      "INSERT INTO otp_tokens (product_id, buyer_id, seller_id, otp_hash, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))",
+      [id, buyerId, seller[0].sellerid, otpHash]
+    );
+
+    // Update status to otp_generated
+    await connection.query(
+      "UPDATE products SET status = 'otp_generated' WHERE pid = ?",
+      [id]
+    );
+
+    await connection.commit();
+    res.json({ otp, expiresIn: 600 });
+
+  } catch (err) {
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+};
+
+export const cancelReservation = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const userId = req.user?.uid;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Check authorization (Buyer OR Seller) without locking initially
+    const [authCheck] = await pool.query(
+      "SELECT p.reserved_by, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ?",
+      [id]
+    );
+
+    if (authCheck.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const { reserved_by, sellerid } = authCheck[0];
+    if (userId !== reserved_by && userId !== sellerid) {
+      return res.status(403).json({ error: "Unauthorized: Only buyer or seller can cancel" });
+    }
+
+    await connection.beginTransaction();
+
+    // Mark active OTPs as used/invalid
+    await connection.query(
+      "UPDATE otp_tokens SET used = true WHERE product_id = ? AND used = false",
+      [id]
+    );
+
+    // Reset location selection flags
+    await connection.query(
+      "UPDATE prod_loc SET is_selected = false WHERE pid = ?",
+      [id]
+    );
+
+    // Reset product
+    await connection.query(
+      "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL WHERE pid = ?",
+      [id]
+    );
+
+    await connection.commit();
+    res.json({ message: "Reservation cancelled" });
+
+  } catch (err) {
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
   }
 };

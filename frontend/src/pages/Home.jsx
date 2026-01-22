@@ -6,7 +6,6 @@ import {
     createProduct,
     createProductSpec,
     addWishlist,
-    createTransaction,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 
@@ -114,25 +113,7 @@ export default function Home() {
         }
     };
 
-    // Keep manual inputs for wishlist/buy as they were in original?
-    // Or simplify. The prompt asked for "Product Details, Cart". 
-    // I'll keep the "buy now" button active.
-
-    const quickBuy = async (pid) => {
-        try {
-            if (!currentUser?.uid) return;
-            await createTransaction({
-                buyerid: Number(currentUser.uid),
-                pid: Number(pid),
-                quantity: 1,
-                status: "completed",
-            });
-            await loadProducts();
-            setStatus({ type: "success", message: "Purchase completed" });
-        } catch (err) {
-            setStatus({ type: "error", message: err.message });
-        }
-    };
+    // NOTE: The "Buy" button navigates to ProductDetails where the OTP reservation flow is implemented.
 
     return (
         <div className="page-content">
@@ -259,38 +240,40 @@ export default function Home() {
                 <section className="card list">
                     <div className="list-header">
                         <h2>Listings</h2>
-                        <span>{loading ? "Loading..." : `${products.length} items`}</span>
+                        <span>{loading ? "Loading..." : `${products.filter(p => p.status !== 'sold').length} items`}</span>
                     </div>
                     <div className="list-grid">
-                        {products.map((item) => (
-                            <article key={item.pid} className="item">
-                                <Link to={`/product/${item.pid}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', flex: 1 }}>
-                                    {item.img_url ? (
-                                        <img src={item.img_url} alt={item.pname} className="thumb" />
-                                    ) : (
-                                        <div className="thumb placeholder">No image</div>
-                                    )}
-                                    <div className="item-body">
-                                        <h3>{item.pname}</h3>
-                                        <p className="muted">Category: {item.category || "—"}</p>
-                                        <p className="muted">Seller: {item.seller_name || "—"}</p>
-                                    </div>
-                                </Link>
+                        {products
+                            .filter(item => item.status !== 'sold')
+                            .map((item) => (
+                                <article key={item.pid} className="item">
+                                    <Link to={`/product/${item.pid}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', flex: 1 }}>
+                                        {item.img_url ? (
+                                            <img src={item.img_url} alt={item.pname} className="thumb" />
+                                        ) : (
+                                            <div className="thumb placeholder">No image</div>
+                                        )}
+                                        <div className="item-body">
+                                            <h3>{item.pname}</h3>
+                                            <p className="muted">Category: {item.category || "—"}</p>
+                                            <p className="muted">Seller: {item.seller_name || "—"}</p>
+                                        </div>
+                                    </Link>
 
-                                <div className="item-actions" style={{ padding: '0 1rem 1rem' }}>
-                                    <div className="item-meta" style={{ marginBottom: '0.5rem' }}>
-                                        <span className={`badge ${item.status}`}>{item.status}</span>
-                                        <p>₹ {item.price}</p>
+                                    <div className="item-actions" style={{ padding: '0 1rem 1rem' }}>
+                                        <div className="item-meta" style={{ marginBottom: '0.5rem' }}>
+                                            <span className={`badge ${item.status}`}>{item.status}</span>
+                                            <p>₹ {item.price}</p>
+                                        </div>
+                                        <button type="button" onClick={() => quickWishlist(item.pid)}>
+                                            ♡
+                                        </button>
+                                        <Link to={`/product/${item.pid}`} className="ghost" style={{ textDecoration: 'none', padding: '0.5rem 1rem', display: 'inline-block' }}>
+                                            View Details
+                                        </Link>
                                     </div>
-                                    <button type="button" onClick={() => quickWishlist(item.pid)}>
-                                        ♡
-                                    </button>
-                                    <button type="button" className="ghost" onClick={() => quickBuy(item.pid)}>
-                                        Buy
-                                    </button>
-                                </div>
-                            </article>
-                        ))}
+                                </article>
+                            ))}
                     </div>
                 </section>
             )}

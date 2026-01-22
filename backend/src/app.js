@@ -17,6 +17,10 @@ import productLocationsRouter from "./routes/productLocations.js";
 import wishlistRouter from "./routes/wishlist.js";
 import transactionsRouter from "./routes/transactions.js";
 import chatsRouter from "./routes/chats.js";
+import otpRouter from "./routes/otpRoutes.js";
+import locationRouter from "./routes/locationRoutes.js";
+import { authenticate } from "./middleware/auth.js";
+import { startOTPCleanup } from "./jobs/otpCleanup.js";
 
 dotenv.config();
 
@@ -28,6 +32,7 @@ const imagesPath = path.resolve(__dirname, "..", "..", "images");
 
 app.use(cors());
 app.use(express.json());
+app.use(authenticate); // Global authentication middleware
 app.use("/images", express.static(imagesPath));
 
 app.get("/", (req, res) => {
@@ -52,6 +57,8 @@ app.use("/api/product-locations", productLocationsRouter);
 app.use("/api/wishlist", wishlistRouter);
 app.use("/api/transactions", transactionsRouter);
 app.use("/api/chats", chatsRouter);
+app.use("/api/otp", otpRouter);
+app.use("/api/locations", locationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });
@@ -65,6 +72,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 connectMongo();
+startOTPCleanup(); // Start background cleanup job
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} → http://localhost:${PORT}`);
