@@ -6,8 +6,19 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+const getStoredUser = () => {
+    try {
+        const stored = localStorage.getItem("campuskart_user");
+        return stored ? JSON.parse(stored) : null;
+    } catch (err) {
+        console.warn("Failed to parse stored user", err);
+        localStorage.removeItem("campuskart_user");
+        return null;
+    }
+};
+
 export const AuthProvider = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState(null);
+    const [currentUser, setCurrentUser] = useState(() => getStoredUser());
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState([]);
 
@@ -18,15 +29,15 @@ export const AuthProvider = ({ children }) => {
                 const usersData = await fetchUsers();
                 setUsers(usersData);
 
-                const stored = localStorage.getItem("campuskart_user");
+                const stored = getStoredUser();
                 if (stored) {
-                    const parsed = JSON.parse(stored);
                     // Verify user still exists vs fetched users
-                    const validUser = usersData.find(u => u.uid === parsed.uid);
+                    const validUser = usersData.find(u => u.uid === stored.uid);
                     if (validUser) {
                         setCurrentUser(validUser);
                     } else {
                         localStorage.removeItem("campuskart_user");
+                        setCurrentUser(null);
                     }
                 }
             } catch (err) {

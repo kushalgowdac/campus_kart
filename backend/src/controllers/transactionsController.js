@@ -4,7 +4,7 @@ export const listTransactions = async (req, res, next) => {
   try {
     const { buyerid, pid, status, sellerid } = req.query;
     let sql =
-      "SELECT t.tid, t.buyerid, t.pid, t.quantity, t.status, t.time_of_purchase, p.pname, p.price, ps.sellerid FROM `transaction` t LEFT JOIN products p ON t.pid = p.pid LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE 1=1";
+      "SELECT t.tid, t.buyerid, bu.name AS buyer_name, t.pid, t.quantity, t.status, t.time_of_purchase, p.pname, p.price, ps.sellerid FROM `transaction` t LEFT JOIN products p ON t.pid = p.pid LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users bu ON t.buyerid = bu.uid WHERE 1=1";
     const params = [];
 
     if (buyerid) {
@@ -37,12 +37,14 @@ export const listTransactions = async (req, res, next) => {
 export const createTransaction = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const { buyerid, pid, quantity, status } = req.body;
+    const { buyerid, pid, status } = req.body;
     if (!buyerid || !pid) {
       return res.status(400).json({ error: "buyerid, pid required" });
     }
 
-    const qty = quantity && Number(quantity) > 0 ? Number(quantity) : 1;
+    // CampusKart treats every product row as a single physical unit to avoid race conditions
+    // and overselling. Even if a client sends a custom quantity we ignore it and always transact 1.
+    const qty = 1;
 
     await connection.beginTransaction();
 
@@ -93,5 +95,34 @@ export const createTransaction = async (req, res, next) => {
     next(err);
   } finally {
     connection.release();
+  }
+};
+
+export const listMyPurchases = async (req, res, next) => {
+  try {
+    const buyerId = req.user?.uid;
+    if (!buyerId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT t.tid,
+              p.pname AS product_name,
+              seller.name AS seller_name,
+              t.quantity,
+              COALESCE(p.price, 0) * t.quantity AS amount,
+              t.time_of_purchase
+       FROM \`transaction\` t
+       JOIN products p ON t.pid = p.pid
+       JOIN product_seller ps ON p.pid = ps.pid
+       JOIN users seller ON ps.sellerid = seller.uid
+       WHERE t.buyerid = ?
+       ORDER BY t.time_of_purchase DESC`,
+      [buyerId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    next(err);
   }
 };

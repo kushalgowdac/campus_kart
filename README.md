@@ -2,6 +2,106 @@
 
 A campus-based peer-to-peer marketplace for buying and selling used items among students.
 
+## 1. Project Overview
+- **CampusKart** is a full-stack marketplace where students list single-unit products, coordinate meetups, and complete sales using OTP verification.
+- **Tech stack**: React (Vite) frontend, Node.js + Express backend, MySQL primary database (MongoDB optional for chat).
+- **Signature capabilities**:
+  - Product listing, filtering, and wishlist-driven marketplace
+  - OTP-based in-person exchange verification with automatic expiry cleanup
+  - Location proposal/selection workflow prior to OTP generation
+  - Unified dashboard tabs: `My Listings`, `Sold Items`, `My Purchases`
+  - Secure reservation lifecycle with background jobs that reset stale flows
+
+## 2. Prerequisites
+- Node.js **v18+** (includes npm)
+- MySQL Server 8.x (or compatible)
+- Git
+- npm CLI (bundled with Node, but list explicitly for clarity)
+
+## 3. Project Setup Instructions
+
+### Step 1 – Clone Repository
+```bash
+git clone https://github.com/kushalgowdac/campus_kart.git
+cd campus_kart
+```
+
+### Step 2 – Install Dependencies
+```bash
+# Backend
+cd backend
+npm install
+
+# Frontend (in a second terminal)
+cd ../frontend
+npm install
+```
+
+### Step 3 – Database Setup
+1. Create a database (e.g., `campuskart`).
+2. From the project root, import the SQL files under `database/` in roughly this order:
+	- `schema.sql` – base tables
+	- `seed.sql` – optional starter data
+	- `otp_tokens_migration.sql` – OTP table
+	- `location_migration.sql` – location workflow
+	- `reschedule_migration.sql` – reschedule support (if present)
+	- Any other migration file provided in the folder
+3. Example MySQL command:
+	```bash
+	mysql -u root -p campuskart < database/schema.sql
+	```
+
+### Step 4 – Environment Variables
+Create `backend/.env` with your database credentials and desired ports:
+```env
+PORT=3000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=campuskart
+MONGO_URI=
+```
+> Leave `MONGO_URI` blank if you are not using MongoDB chat features.
+
+If you want to pin the frontend to the backend URL, create `frontend/.env`:
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+### Step 5 – Start Servers
+```bash
+# Backend
+cd backend
+npm start   # http://localhost:3000
+
+# Frontend (new terminal)
+cd frontend
+npm run dev # http://localhost:5173
+```
+
+## 4. How To Use The App (Basic Flow)
+1. Login as a buyer, browse listings, and reserve a product.
+2. Seller proposes meeting locations; buyer selects one.
+3. Buyer generates the OTP after location confirmation.
+4. Seller verifies the OTP to finalize the sale; status flips to `sold`.
+5. Dashboards update automatically: sellers see sales, buyers see purchases.
+
+## 5. Running In Two Browsers (Buyer + Seller)
+- Open two separate browsers (or one browser + incognito window).
+- Log in as different users (e.g., buyer in one, seller in the other).
+- Walk through the flow above to simulate real exchanges end-to-end.
+
+## 6. Common Issues & Fixes
+- **Refresh sends you to login** → Ensure localStorage still contains `campuskart_user`; log in again if cleared.
+- **MySQL errors** → Double-check that every migration in `database/` was run and that `.env` credentials are valid.
+- **Port already in use** → Change `PORT` in `backend/.env` (and `VITE_API_URL` if set) or free the port.
+
+## 7. Folder Structure Overview
+- `backend/` → Express app, routes, controllers, jobs, middleware, and database connectors.
+- `frontend/` → React + Vite SPA (components, pages, API client, styles).
+- `database/` → SQL schema, seed data, and migrations for OTP, locations, rescheduling, etc.
+- See the detailed tree later in this README for deeper context.
+
 ## 📖 Quick Links
 
 - **GitHub Repository:** https://github.com/kushalgowdac/campus_kart.git

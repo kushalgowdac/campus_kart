@@ -51,6 +51,9 @@ export const getProductById = async (req, res, next) => {
   }
 };
 
+// CampusKart intentionally models each product row as a single physical unit.
+// Keeping listings single-quantity avoids race conditions in the reservation/OTP flow
+// and guarantees that we never oversell when multiple buyers act at the same time.
 export const createProduct = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
@@ -133,7 +136,13 @@ export const updateProduct = async (req, res, next) => {
       preferred_for,
       no_of_copies,
       sellerid,
+      image_url,
     } = req.body;
+
+    console.log("[ProductsController] updateProduct", {
+      id,
+      body: req.body,
+    });
 
     await connection.beginTransaction();
 
@@ -163,11 +172,28 @@ export const updateProduct = async (req, res, next) => {
       );
     }
 
+    if (image_url !== undefined) {
+      const normalizedImage =
+        typeof image_url === "string"
+          ? image_url.trim() || null
+          : image_url ?? null;
+
+      await connection.query("DELETE FROM prod_img WHERE pid = ?", [id]);
+
+      if (normalizedImage) {
+        await connection.query(
+          "INSERT INTO prod_img (pid, img_url) VALUES (?, ?)",
+          [id, normalizedImage]
+        );
+      }
+    }
+
     await connection.commit();
 
     res.json({ message: "Product updated" });
   } catch (err) {
     await connection.rollback();
+    console.error("[ProductsController] updateProduct error", err);
     next(err);
   } finally {
     connection.release();
@@ -277,7 +303,9 @@ export const confirmMeet = async (req, res, next) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    if (product[0].status !== "location_selected") {
+    const currentStatus = product[0].status;
+
+    if (!["location_selected", "otp_generated"].includes(currentStatus)) {
       await connection.rollback();
       return res.status(400).json({
         error: `OTP generation requires location selection. Current status: ${product[0].status}`
@@ -297,7 +325,7 @@ export const confirmMeet = async (req, res, next) => {
       return res.status(403).json({ error: "Unauthorized: Only buyer who reserved can confirm meet" });
     }
 
-    // Double validation: Verify a location has been selected
+    // Double validation: Verify a location has been selected (relevant even after OTP generated)
     const [selectedLocation] = await connection.query(
       "SELECT location FROM prod_loc WHERE pid = ? AND is_selected = true",
       [id]
@@ -310,7 +338,7 @@ export const confirmMeet = async (req, res, next) => {
       });
     }
 
-    // SINGLE ACTIVE OTP ENFORCEMENT
+    // SINGLE ACTIVE OTP ENFORCEMENT / fetch existing OTP for reuse
     const [existingOTP] = await connection.query(
       "SELECT otp_id, expires_at FROM otp_tokens WHERE product_id = ? AND used = false AND expires_at > NOW()",
       [id]
@@ -324,6 +352,11 @@ export const confirmMeet = async (req, res, next) => {
         expiresIn: timeRemaining,
         note: "Use existing OTP or wait for expiration"
       });
+    }
+
+    if (currentStatus === "otp_generated") {
+      await connection.rollback();
+      return res.status(400).json({ error: "Active OTP missing. Please contact support." });
     }
 
     // Generate and Hash OTP
@@ -376,7 +409,7 @@ export const cancelReservation = async (req, res, next) => {
 
     // Check authorization (Buyer OR Seller) without locking initially
     const [authCheck] = await pool.query(
-      "SELECT p.reserved_by, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ?",
+      "SELECT p.status, p.reserved_by, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ?",
       [id]
     );
 
@@ -384,7 +417,11 @@ export const cancelReservation = async (req, res, next) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    const { reserved_by, sellerid } = authCheck[0];
+    const { status, reserved_by, sellerid } = authCheck[0];
+    if (status === 'sold') {
+      return res.status(400).json({ error: "Product already sold. Reservation cannot be cancelled." });
+    }
+
     if (userId !== reserved_by && userId !== sellerid) {
       return res.status(403).json({ error: "Unauthorized: Only buyer or seller can cancel" });
     }
@@ -404,10 +441,15 @@ export const cancelReservation = async (req, res, next) => {
     );
 
     // Reset product
-    await connection.query(
-      "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ?",
+    const [productReset] = await connection.query(
+      "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ? AND status <> 'sold'",
       [id]
     );
+
+    if (productReset.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: "Unable to cancel reservation after product was sold." });
+    }
 
     await connection.commit();
     res.json({ message: "Reservation cancelled" });
@@ -449,6 +491,11 @@ export const rescheduleProduct = async (req, res, next) => {
     const reservedBy = product[0].reserved_by;
     const requestedBy = product[0].reschedule_requested_by;
 
+    if (currentStatus === 'sold') {
+      await connection.rollback();
+      return res.status(400).json({ error: "Product already sold. Cannot reschedule." });
+    }
+
     // Authorization
     if (sellerId !== userId && reservedBy !== userId) {
       await connection.rollback();
@@ -480,10 +527,15 @@ export const rescheduleProduct = async (req, res, next) => {
         await connection.query("UPDATE prod_loc SET is_selected = false WHERE pid = ?", [id]);
 
         // 3. Reset Product
-        await connection.query(
-          "UPDATE products SET status = 'reserved', reschedule_requested_by = NULL WHERE pid = ?",
+        const [resetResult] = await connection.query(
+          "UPDATE products SET status = 'reserved', reschedule_requested_by = NULL WHERE pid = ? AND status <> 'sold'",
           [id]
         );
+
+        if (resetResult.affectedRows === 0) {
+          await connection.rollback();
+          return res.status(400).json({ error: "Unable to reschedule after product was sold." });
+        }
 
         await connection.commit();
         return res.json({
@@ -544,11 +596,17 @@ export const rejectReschedule = async (req, res, next) => {
     const reservedBy = product[0].reserved_by;
     const sellerId = product[0].sellerid;
     const requestedBy = product[0].reschedule_requested_by;
+    const currentStatus = product[0].status;
 
     // Authorization
     if (sellerId !== userId && reservedBy !== userId) {
       await connection.rollback();
       return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    if (currentStatus === 'sold') {
+      await connection.rollback();
+      return res.status(400).json({ error: "Product already sold. No reschedule actions allowed." });
     }
 
     if (requestedBy === null) {
@@ -573,10 +631,15 @@ export const rejectReschedule = async (req, res, next) => {
       await connection.query("UPDATE otp_tokens SET used = true WHERE product_id = ? AND used = false", [id]);
 
       // 3. FULL CANCEL
-      await connection.query(
-        "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ?",
+      const [cancelResult] = await connection.query(
+        "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL WHERE pid = ? AND status <> 'sold'",
         [id]
       );
+
+      if (cancelResult.affectedRows === 0) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Product already sold. Cannot cancel reschedule." });
+      }
 
       await connection.commit();
       return res.json({

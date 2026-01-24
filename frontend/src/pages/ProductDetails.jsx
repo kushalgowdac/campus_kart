@@ -56,6 +56,14 @@ export default function ProductDetails() {
         }
     };
 
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            refreshProduct();
+        }, 3000);
+
+        return () => clearInterval(intervalId);
+    }, [id]);
+
     const handleWishlist = async () => {
         try {
             await addWishlist({ uid: currentUser.uid, pid: product.pid });
@@ -154,6 +162,10 @@ export default function ProductDetails() {
     if (error) return <div className="error">Error: {error}</div>;
     if (!product) return <div>Product not found</div>;
 
+    const user = currentUser;
+    const isBuyer = user?.uid === product?.reserved_by;
+    const isSeller = user?.uid === product?.sellerid;
+
     return (
         <div className="container" style={{ padding: '2rem' }}>
             <button onClick={() => navigate(-1)} className="ghost" style={{ marginBottom: '1rem' }}>
@@ -162,13 +174,6 @@ export default function ProductDetails() {
 
             {status.message && (
                 <div className={`status ${status.type}`}>{status.message}</div>
-            )}
-
-            {/* DEBUG INFO - REMOVE LATER */}
-            {currentUser && (
-                <div style={{ background: '#eee', padding: '5px', fontSize: '12px', marginBottom: '10px', border: '1px solid #ccc' }}>
-                    👤 <strong>Debug:</strong> You are logged in as <strong>{currentUser.name} (ID: {currentUser.uid})</strong>
-                </div>
             )}
 
             <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
@@ -185,6 +190,9 @@ export default function ProductDetails() {
                         <span className={`badge ${product.status}`}>{product.status}</span>
                         <h2 style={{ margin: 0 }}>₹ {product.price}</h2>
                     </div>
+                    <p className="muted" style={{ marginTop: '0.5rem' }}>
+                        Only 1 unit available per listing.
+                    </p>
 
                     <p className="muted" style={{ marginTop: '1rem' }}>
                         Category: {product.category}
@@ -243,20 +251,20 @@ export default function ProductDetails() {
                         )}
 
                         {/* 5. Location Selected / OTP Generated - Buyer and Seller Views */}
-                        {(['location_selected', 'otp_generated'].includes(product.status) && currentUser && !product.reschedule_requested_by) && (
+                        {(['location_selected', 'otp_generated'].includes(product.status) && !product.reschedule_requested_by) && (
                             <>
-                                {/* Buyer View - OTP Display */}
-                                {product.reserved_by === currentUser.uid && (
+                                {/* Buyer View - OTP Flow */}
+                                {isBuyer && (
                                     <BuyerOTPDisplay product={product} onUpdate={refreshProduct} />
                                 )}
 
                                 {/* Seller View - OTP Input */}
-                                {product.sellerid === currentUser.uid && product.status === 'otp_generated' && (
+                                {product.status === 'otp_generated' && isSeller && (
                                     <SellerOTPInput product={product} onUpdate={refreshProduct} />
                                 )}
 
                                 {/* Seller waiting message */}
-                                {product.sellerid === currentUser.uid && product.status === 'location_selected' && (
+                                {isSeller && product.status === 'location_selected' && (
                                     <div className="card" style={{ border: '1px dashed #ffa500', marginTop: '1rem' }}>
                                         <h4>Location Confirmed</h4>
                                         <p>Waiting for buyer to generate OTP...</p>

@@ -19,7 +19,8 @@ export async function cleanupExpiredOTPs() {
         // 2. Reset products with expired reservations (>30 min)
         // Includes all workflow states from reserved through otp_generated
         const [productResult] = await conn.query(
-            "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL WHERE status IN ('reserved', 'location_proposed', 'location_selected', 'otp_generated') AND reserved_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
+            // Intentionally excludes 'sold' to protect completed orders
+            "UPDATE products SET status = 'available', reserved_by = NULL, reserved_at = NULL WHERE status IN ('reserved', 'location_proposed', 'location_selected', 'otp_generated') AND status <> 'sold' AND reserved_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
         );
 
         // 3. Clean up orphaned location selections for available products

@@ -99,15 +99,41 @@ export const verifyOTP = async (req, res, next) => {
                 [otpToken.otp_id]
             );
 
+            if (!product.reserved_by) {
+                await conn.rollback();
+                return res.status(400).json({ error: "Product is not reserved" });
+            }
+
+            // Single-unit marketplace: OTP verification permanently marks the listing as sold.
+            const saleQuantity = 1;
+            const remainingCopies = 0;
+            const nextStatus = 'sold';
+
             await conn.query(
-                "UPDATE products SET status = 'sold' WHERE pid = ?",
-                [productId]
+                "INSERT INTO `transaction` (buyerid, pid, quantity, status) VALUES (?, ?, ?, 'completed')",
+                [product.reserved_by, productId, saleQuantity]
             );
+
+            const [productUpdate] = await conn.query(
+                "UPDATE products SET status = 'sold', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL, no_of_copies = ? WHERE pid = ?",
+                [remainingCopies, productId]
+            );
+
+            console.log(`[OTP Verify] Product ${productId} marked as sold. Rows updated: ${productUpdate.affectedRows}`);
+
+            if (productUpdate.affectedRows === 0) {
+                await conn.rollback();
+                return res.status(500).json({ error: "Failed to finalize sale" });
+            }
+
+            await conn.query("DELETE FROM prod_loc WHERE pid = ?", [productId]);
 
             await conn.commit();
 
             return res.json({
                 success: true,
+                status: nextStatus,
+                remainingCopies,
                 message: "Product verified and marked as sold"
             });
         } else {

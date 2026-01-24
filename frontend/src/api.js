@@ -61,6 +61,11 @@ export const createProduct = async (payload) => {
   return handle(res);
 };
 
+export const updateProduct = async (pid, payload) => {
+  const res = await fetch(`${API_URL}/api/products/${pid}`, getConfig("PUT", payload));
+  return handle(res);
+};
+
 export const addWishlist = async (payload) => {
   const res = await fetch(`${API_URL}/api/wishlist`, getConfig("POST", payload));
   return handle(res);
@@ -73,6 +78,11 @@ export const createTransaction = async (payload) => {
 
 export const fetchTransactions = async (query = "") => {
   const res = await fetch(`${API_URL}/api/transactions${query}`);
+  return handle(res);
+};
+
+export const getMyPurchases = async () => {
+  const res = await fetch(`${API_URL}/api/transactions/my-purchases`, getConfig());
   return handle(res);
 };
 

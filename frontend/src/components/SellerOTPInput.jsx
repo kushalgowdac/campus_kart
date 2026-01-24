@@ -16,9 +16,10 @@ const SellerOTPInput = ({ product, onUpdate }) => {
         try {
             await verifyOtp(product.pid, otpInput);
             setStatus('success');
-            setTimeout(() => {
-                if (onUpdate) onUpdate();
-            }, 1000);
+            setOtpInput('');
+            if (onUpdate) {
+                await onUpdate();
+            }
         } catch (err) {
             setError(err.message);
         } finally {
