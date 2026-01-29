@@ -1,421 +1,621 @@
-# CampusKart 🛒
+# CampusKart Marketplace 🛒
 
-A campus-based peer-to-peer marketplace for buying and selling used items among students.
+A secure campus-based peer-to-peer marketplace platform for RVCE students to buy and sell used items with built-in gamification, trust scoring, and OTP-verified exchanges.
 
-## 1. Project Overview
-- **CampusKart** is a full-stack marketplace where students list single-unit products, coordinate meetups, and complete sales using OTP verification.
-- **Tech stack**: React (Vite) frontend, Node.js + Express backend, MySQL primary database (MongoDB optional for chat).
-- **Signature capabilities**:
-  - Product listing, filtering, and wishlist-driven marketplace
-  - OTP-based in-person exchange verification with automatic expiry cleanup
-  - Location proposal/selection workflow prior to OTP generation
-  - Unified dashboard tabs: `My Listings`, `Sold Items`, `My Purchases`
-  - Secure reservation lifecycle with background jobs that reset stale flows
+---
 
-## 2. Prerequisites
-- Node.js **v18+** (includes npm)
-- MySQL Server 8.x (or compatible)
-- Git
-- npm CLI (bundled with Node, but list explicitly for clarity)
+## 📋 Project Overview
 
-## 3. Project Setup Instructions
+**CampusKart** is a full-stack marketplace application designed specifically for campus communities. Students can list single-unit products, coordinate in-person meetups, and complete secure exchanges using OTP verification.
 
-### Step 1 – Clone Repository
+### Main Features
+
+- **User Authentication**: Secure login system with RVCE email validation
+- **Product Listings**: Browse, search, and filter available products
+- **Wishlist System**: Save favorite items for later
+- **Location Selection**: Sellers propose meeting locations; buyers select preferred spots
+- **OTP-Verified Exchange**: Generate and verify OTPs for secure in-person handoffs
+- **Gamification System**: 
+  - Trust score tracking based on successful transactions
+  - Badge achievements (First Trade, Trusted User, Power Seller)
+  - User ratings and reviews
+  - Leaderboard rankings
+- **Unified Dashboard**: View "My Listings", "Sold Items", and "My Purchases" in one place
+- **Transaction Management**: Complete reservation lifecycle with automatic cleanup of stale flows
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **React** 18.3.1 - UI library
+- **Vite** 6.0.8 - Build tool and dev server
+- **React Router DOM** 7.12.0 - Client-side routing
+
+### Backend
+- **Node.js** v18+ - Runtime environment
+- **Express** 5.2.1 - Web application framework
+- **bcrypt** 6.0.0 - Password hashing
+- **cors** 2.8.5 - Cross-origin resource sharing
+- **dotenv** 17.2.3 - Environment variable management
+- **mysql2** 3.16.0 - MySQL database driver
+
+### Database
+- **MySQL** 8.x - Primary relational database
+- **Mongoose** 8.10.0 - MongoDB ODM (optional, for future chat features)
+
+---
+
+## ✅ Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** v18 or higher ([Download](https://nodejs.org/))
+- **MySQL** 8.x ([Download](https://dev.mysql.com/downloads/mysql/))
+- **Git** ([Download](https://git-scm.com/downloads))
+
+To verify installations:
+
+```bash
+node --version    # Should be v18.x or higher
+npm --version     # Comes with Node.js
+mysql --version   # Should be 8.x
+git --version
+```
+
+---
+
+## 🚀 Setup Instructions
+
+Follow these steps to get CampusKart running on your local machine.
+
+### Step 1: Clone the Repository
+
 ```bash
 git clone https://github.com/kushalgowdac/campus_kart.git
 cd campus_kart
 ```
 
-### Step 2 – Install Dependencies
+### Step 2: Install Backend Dependencies
+
 ```bash
-# Backend
 cd backend
 npm install
+```
 
-# Frontend (in a second terminal)
+### Step 3: Install Frontend Dependencies
+
+```bash
 cd ../frontend
 npm install
 ```
 
-### Step 3 – Database Setup
-1. Create a database (e.g., `campuskart`).
-2. From the project root, import the SQL files under `database/` in roughly this order:
-	- `schema.sql` – base tables
-	- `seed.sql` – optional starter data
-	- `otp_tokens_migration.sql` – OTP table
-	- `location_migration.sql` – location workflow
-	- `reschedule_migration.sql` – reschedule support (if present)
-	- Any other migration file provided in the folder
-3. Example MySQL command:
-	```bash
-	mysql -u root -p campuskart < database/schema.sql
-	```
+### Step 4: Create Backend Environment File
 
-### Step 4 – Environment Variables
-Create `backend/.env` with your database credentials and desired ports:
-```env
-PORT=3000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=campuskart
-MONGO_URI=
+Navigate to the `backend` directory and create a `.env` file:
+
+```bash
+cd ../backend
 ```
-> Leave `MONGO_URI` blank if you are not using MongoDB chat features.
 
-If you want to pin the frontend to the backend URL, create `frontend/.env`:
+Create a file named `.env` with the following content:
+
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=campuskart
+PORT=3000
+```
+
+> **Important**: Replace `your_mysql_password` with your actual MySQL root password.
+
+### Step 5: Create Frontend Environment File (Optional)
+
+If you want to explicitly configure the API URL, create `frontend/.env`:
+
+```bash
+cd ../frontend
+```
+
+Create a file named `.env` with:
+
 ```env
 VITE_API_URL=http://localhost:3000
 ```
 
-### Step 5 – Start Servers
-```bash
-# Backend
-cd backend
-npm start   # http://localhost:3000
+> **Note**: This is optional. The frontend will default to `http://localhost:3000` if not set.
 
-# Frontend (new terminal)
-cd frontend
-npm run dev # http://localhost:5173
+### Step 6: Database Setup
+
+**6.1: Start MySQL Server**
+
+Make sure your MySQL server is running. On Windows, check the Services app, or start it with:
+
+```bash
+net start MySQL80
 ```
 
-## 4. How To Use The App (Basic Flow)
-1. Login as a buyer, browse listings, and reserve a product.
-2. Seller proposes meeting locations; buyer selects one.
-3. Buyer generates the OTP after location confirmation.
-4. Seller verifies the OTP to finalize the sale; status flips to `sold`.
-5. Dashboards update automatically: sellers see sales, buyers see purchases.
+**6.2: Create Database**
 
-## 5. Running In Two Browsers (Buyer + Seller)
-- Open two separate browsers (or one browser + incognito window).
-- Log in as different users (e.g., buyer in one, seller in the other).
-- Walk through the flow above to simulate real exchanges end-to-end.
+Open a MySQL terminal:
 
-## 6. Common Issues & Fixes
-- **Refresh sends you to login** → Ensure localStorage still contains `campuskart_user`; log in again if cleared.
-- **MySQL errors** → Double-check that every migration in `database/` was run and that `.env` credentials are valid.
-- **Port already in use** → Change `PORT` in `backend/.env` (and `VITE_API_URL` if set) or free the port.
-
-## 7. Folder Structure Overview
-- `backend/` → Express app, routes, controllers, jobs, middleware, and database connectors.
-- `frontend/` → React + Vite SPA (components, pages, API client, styles).
-- `database/` → SQL schema, seed data, and migrations for OTP, locations, rescheduling, etc.
-- See the detailed tree later in this README for deeper context.
-
-## 📖 Quick Links
-
-- **GitHub Repository:** https://github.com/kushalgowdac/campus_kart.git
-- **Project Progress:** See [PROGRESS.md](PROGRESS.md) for current status and what's completed
-- **Task List:** See [FRONTEND_TASKS.md](FRONTEND_TASKS.md) for frontend development tasks
-- **Requirements:** See [REQUIREMENTS.md](REQUIREMENTS.md) for detailed specifications
-
----
-
-## 🎯 Project Status
-
-| Component | Status | Coverage |
-|-----------|--------|----------|
-| **Database Schema** | ✅ Complete | 100% - Ready for use |
-| **Backend API** | 🔄 In Progress | 80% - Routes/Controllers need completion |
-| **Frontend** | 🔄 In Progress | 40% - Basic setup done, pages needed |
-| **Testing** | ⏳ Not Started | 0% - To be done |
-
-See [PROGRESS.md](PROGRESS.md) for detailed breakdown.
-
----
-
-## 🏗️ Architecture
-
-### Database (MySQL)
-- Users, Products, Transactions, Wishlist
-- Product metadata (specs, images, locations)
-- ER diagram compliant schema
-- Enforced constraints and relationships
-
-### Backend (Node.js + Express)
-- RESTful API endpoints
-- Database connection pooling
-- MongoDB for chat (optional)
-- Organized routes and controllers
-
-### Frontend (React + Vite)
-- Modern SPA architecture
-- Component-based UI
-- API integration layer
-- Real-time updates ready
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
 ```bash
-- Node.js 16+ 
-- MySQL 8.x (local or remote)
-- Git
+mysql -u root -p
 ```
 
-### Backend Setup
+Enter your password, then run:
+
+```sql
+CREATE DATABASE campuskart;
+EXIT;
+```
+
+**6.3: Run Migrations**
+
+From the project root directory, run these commands in order:
+
+```bash
+# Navigate to project root
+cd c:\Users\harshith\Desktop\5th_sem\aiml\campus_kart
+
+# Run migrations in sequence
+mysql -u root -p campuskart < database/schema.sql
+mysql -u root -p campuskart < database/seed.sql
+mysql -u root -p campuskart < database/otp_tokens_migration.sql
+mysql -u root -p campuskart < database/location_migration.sql
+mysql -u root -p campuskart < database/reschedule_migration.sql
+mysql -u root -p campuskart < database/gamification_migration.sql
+```
+
+> **Tip**: You'll be prompted for your MySQL password for each command.
+
+**6.4: Verify Database Setup**
+
+Log into MySQL and verify tables were created:
+
+```bash
+mysql -u root -p campuskart
+```
+
+```sql
+SHOW TABLES;
+```
+
+You should see the following tables:
+- `users`
+- `products`
+- `product_seller`
+- `prod_spec`
+- `prod_img`
+- `prod_loc`
+- `transaction`
+- `add_to_wishlist`
+- `otp_tokens`
+- `proposed_locations`
+- `reschedule_requests`
+- `badges`
+- `user_badges`
+- `user_ratings`
+
+Type `EXIT;` to close MySQL.
+
+### Step 7: Start the Backend Server
+
+Open a terminal window:
 
 ```bash
 cd backend
-npm install
-
-# Create .env file
-cat > .env << EOF
-PORT=3000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=campuskart
-MONGODB_URI=mongodb://localhost:27017/campuskart
-EOF
-
-# Initialize database
-mysql -u root -p < ../database/schema.sql
-
-# Start server
 npm start
 ```
 
-**Verify:** `curl http://localhost:3000/` (should return "CampusKart API is running")
+You should see:
 
-### Frontend Setup
+```
+Server running on port 3000
+MySQL database connected successfully
+```
+
+> **Backend URL**: http://localhost:3000
+
+### Step 8: Start the Frontend Server
+
+Open a **new terminal window**:
 
 ```bash
 cd frontend
-npm install
-
-# Create .env (if needed)
-# VITE_API_URL=http://localhost:3000/api
-
-# Start dev server
 npm run dev
 ```
 
-**Access:** http://localhost:5173 (or port shown in terminal)
-
----
-
-## 📚 Database Schema
-
-### Core Tables
-- **users** - User profiles (uid, name, email, password)
-- **products** - Product listings (pid, pname, category, price, status, etc.)
-- **product_seller** - Maps products to sellers
-- **transaction** - Purchase records
-- **add_to_wishlist** - Wishlist entries
-
-### Metadata Tables
-- **prod_spec** - Product specifications (key-value pairs)
-- **prod_img** - Product image URLs
-- **prod_loc** - Pickup locations
-
-See [database/schema.sql](database/schema.sql) for complete schema.
-
----
-
-## 🔗 API Routes
-
-### Base URL: `/api`
-
-| Resource | Endpoints | Status |
-|----------|-----------|--------|
-| Users | `GET/POST/PUT/DELETE /users` | 🔄 Partial |
-| Products | `GET/POST/PUT/DELETE /products` | 🔄 Partial |
-| Product Specs | `GET/POST /product-specs` | 🔄 Partial |
-| Product Images | `GET/POST /product-images` | 🔄 Partial |
-| Product Locations | `GET/POST /product-locations` | 🔄 Partial |
-| Wishlist | `GET/POST/DELETE /wishlist` | 🔄 Partial |
-| Transactions | `GET/POST /transactions` | 🔄 Partial |
-| Chats | `GET/POST /chats` | 🔄 Partial |
-
-See backend controller files for current implementation.
-
----
-
-## 📁 Project Structure
+You should see:
 
 ```
-CampusKart/
-├── backend/                           # Express API server
-│   ├── src/
-│   │   ├── app.js                    # Entry point
-│   │   ├── db/
-│   │   │   ├── index.js              # MySQL pool
-│   │   │   └── mongo.js              # MongoDB connection
-│   │   ├── controllers/              # Business logic
-│   │   ├── routes/                   # API endpoints
-│   │   └── models/                   # Data models
-│   └── package.json
-│
-├── frontend/                          # React Vite app
-│   ├── src/
-│   │   ├── App.jsx                   # Main component
-│   │   ├── api.js                    # API client
-│   │   └── styles.css                # Global styles
-│   ├── index.html
-│   └── package.json
-│
-├── database/                          # SQL scripts
-│   ├── schema.sql                    # Database schema
-│   ├── seed.sql                      # Sample data
-│   └── ...
-│
-├── PROGRESS.md                        # ⭐ Current status & next steps
-├── REQUIREMENTS.md                    # Functional requirements
-├── FRONTEND_TASKS.md                  # Frontend development tasks
-└── README.md                          # This file
+VITE v6.0.8  ready in XXX ms
+
+➜  Local:   http://localhost:5173/
+➜  Network: use --host to expose
 ```
 
----
+> **Frontend URL**: http://localhost:5173
 
-## ✨ Key Features (Roadmap)
+### Step 9: Open the Application
 
-### ✅ Completed
-- Database schema (MySQL)
-- Express API scaffolding
-- React project setup
-- Environment configuration
+Open your browser and navigate to:
 
-### 🔄 In Progress
-- API controller implementations
-- Frontend pages and components
-- Authentication & authorization
-- Form validation
+```
+http://localhost:5173
+```
 
-### ⏳ Not Started
-- Comprehensive testing
-- Production deployment config
-- CI/CD pipeline
-- API documentation (Swagger)
+You should see the CampusKart login page!
 
 ---
 
-## 🛠️ Development Workflow
+## 🌐 Running the App
 
-### Adding a New Endpoint
+### Port Configuration
 
-1. **Create Route Handler** → `backend/src/routes/resource.js`
-2. **Create Controller Logic** → `backend/src/controllers/resourceController.js`
-3. **Add Database Queries** → Use MySQL pool from `db/index.js`
-4. **Register Route** → Import in `app.js`
+| Service | Default Port | URL |
+|---------|--------------|-----|
+| **Backend API** | 3000 | http://localhost:3000 |
+| **Frontend App** | 5173 | http://localhost:5173 |
 
-### Adding a Frontend Page
+### Confirming Backend is Running
 
-1. **Create Component** → `frontend/src/pages/ResourcePage.jsx`
-2. **Add API Call** → Use functions from `api.js`
-3. **Add Route** → Update app routing (when React Router is added)
-4. **Style Components** → Use global `styles.css` or component CSS
+Visit http://localhost:3000 in your browser. You should see a response or API status message.
 
----
+Or use curl:
 
-## 🔒 Important Notes
+```bash
+curl http://localhost:3000
+```
 
-### Database
-- ✅ Follow the ER diagram strictly
-- ✅ All tables and relationships are predefined
-- ✅ Do NOT modify schema without team discussion
-- ✅ Use transactions for multi-step operations
+### Confirming Frontend is Running
 
-### API
-- Use async/await for database operations
-- Always validate and sanitize inputs
-- Follow REST conventions
-- Return meaningful error messages
-
-### Frontend
-- Use React best practices
-- Keep components small and reusable
-- Handle loading and error states
-- Mobile-responsive design
+Visit http://localhost:5173 in your browser to see the React application.
 
 ---
 
 ## 📝 Environment Variables
 
-### Backend (.env)
+### Backend `.env` File
+
+Location: `backend/.env`
+
 ```env
-PORT=3000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=password
-DB_NAME=campuskart
-MONGODB_URI=mongodb://localhost:27017/campuskart
-NODE_ENV=development
+# Database Configuration
+DB_HOST=127.0.0.1           # MySQL host address
+DB_PORT=3306                # MySQL port
+DB_USER=root                # MySQL username
+DB_PASSWORD=your_password   # MySQL password
+DB_NAME=campuskart          # Database name
+
+# Server Configuration
+PORT=3000                   # Backend server port
+
+# Optional: MongoDB (for future chat features)
+# MONGO_URI=mongodb://localhost:27017/campuskart
 ```
 
-### Frontend (.env)
+### Frontend `.env` File (Optional)
+
+Location: `frontend/.env`
+
 ```env
-VITE_API_URL=http://localhost:3000/api
+# API Configuration
+VITE_API_URL=http://localhost:3000
 ```
 
 ---
 
-## 🤝 Team Handoff
+## 🗄️ Database Setup
 
-This project is ready for the next developer. All groundwork is in place:
+### Database Structure
 
-1. **Database** is fully designed and ready
-2. **Backend routes** are scaffolded and awaiting controller implementation
-3. **Frontend** is initialized with build tooling ready
+CampusKart uses MySQL with the following key tables:
 
-**Next developer focus:**
-- Complete backend controller functions
-- Build React components and pages
-- Integrate frontend with API
-- Add authentication
-- Comprehensive testing
+**Core Tables:**
+- `users` - User accounts and profiles
+- `products` - Product listings
+- `product_seller` - Links products to sellers
+- `transaction` - Purchase records and order tracking
+- `add_to_wishlist` - User wishlists
 
-See [PROGRESS.md](PROGRESS.md) for detailed next steps.
+**Product Metadata:**
+- `prod_spec` - Product specifications (key-value pairs)
+- `prod_img` - Product image URLs
+- `prod_loc` - Available pickup locations
+
+**Exchange Workflow:**
+- `otp_tokens` - OTP generation and verification
+- `proposed_locations` - Seller-proposed meeting spots
+- `reschedule_requests` - Reschedule coordination
+
+**Gamification:**
+- `badges` - Available badge types
+- `user_badges` - User-earned badges
+- `user_ratings` - Transaction ratings and reviews
+
+### Migration Order
+
+Always run migrations in this exact order:
+
+1. `schema.sql` - Creates base tables and relationships
+2. `seed.sql` - Adds sample data for testing
+3. `otp_tokens_migration.sql` - Adds OTP verification system
+4. `location_migration.sql` - Adds location proposal workflow
+5. `reschedule_migration.sql` - Adds reschedule functionality
+6. `gamification_migration.sql` - Adds trust scores, badges, and ratings
+
+### Resetting the Database
+
+If you need to start fresh:
+
+```bash
+# Drop and recreate database
+mysql -u root -p -e "DROP DATABASE IF EXISTS campuskart; CREATE DATABASE campuskart;"
+
+# Re-run all migrations
+mysql -u root -p campuskart < database/schema.sql
+mysql -u root -p campuskart < database/seed.sql
+mysql -u root -p campuskart < database/otp_tokens_migration.sql
+mysql -u root -p campuskart < database/location_migration.sql
+mysql -u root -p campuskart < database/reschedule_migration.sql
+mysql -u root -p campuskart < database/gamification_migration.sql
+```
+
+### Verifying Tables
+
+```sql
+-- Show all tables
+USE campuskart;
+SHOW TABLES;
+
+-- Check table structure
+DESCRIBE users;
+DESCRIBE products;
+DESCRIBE badges;
+
+-- Verify seed data
+SELECT * FROM users;
+SELECT * FROM products;
+SELECT * FROM badges;
+```
 
 ---
 
-## 🚀 Commands
+## 🐛 Common Errors & Fixes
 
-### Backend
+### 1. MySQL Connection Error
+
+**Error Message:**
+```
+Error: connect ECONNREFUSED 127.0.0.1:3306
+```
+
+**Fixes:**
+- Ensure MySQL server is running: `net start MySQL80` (Windows) or `sudo service mysql start` (Linux/Mac)
+- Verify credentials in `backend/.env` match your MySQL setup
+- Check that `DB_HOST` is set to `127.0.0.1` or `localhost`
+- Test connection: `mysql -u root -p`
+
+### 2. Port Already in Use
+
+**Error Message:**
+```
+Error: listen EADDRINUSE: address already in use :::3000
+```
+
+**Fixes:**
+- **Option 1**: Change the port in `backend/.env`:
+  ```env
+  PORT=3001
+  ```
+  Also update `frontend/.env` if it exists:
+  ```env
+  VITE_API_URL=http://localhost:3001
+  ```
+
+- **Option 2**: Kill the process using the port:
+  ```bash
+  # Windows
+  netstat -ano | findstr :3000
+  taskkill /PID <PID> /F
+  
+  # Linux/Mac
+  lsof -ti:3000 | xargs kill -9
+  ```
+
+### 3. Missing .env File
+
+**Error Message:**
+```
+Cannot read property 'DB_HOST' of undefined
+```
+
+**Fix:**
+Create `backend/.env` file as described in Step 4 of Setup Instructions.
+
+### 4. Node Modules Not Installed
+
+**Error Message:**
+```
+Error: Cannot find module 'express'
+```
+
+**Fix:**
 ```bash
 cd backend
-npm install    # Install dependencies
-npm start      # Start server (port 3000)
-npm test       # Run tests (when added)
+npm install
+
+cd ../frontend
+npm install
 ```
 
-### Frontend
-```bash
-cd frontend
-npm install    # Install dependencies
-npm run dev    # Start dev server (port 5173)
-npm run build  # Build for production
-npm run preview # Preview production build
+### 5. Database Does Not Exist
+
+**Error Message:**
+```
+Error: ER_BAD_DB_ERROR: Unknown database 'campuskart'
 ```
 
-### Database
+**Fix:**
 ```bash
-# Initialize
-mysql -u root -p < database/schema.sql
+mysql -u root -p -e "CREATE DATABASE campuskart;"
+```
 
-# Seed data
-mysql -u root -p campuskart < database/seed.sql
+Then re-run all migrations from Step 6.3.
+
+### 6. Migration Errors
+
+**Error Message:**
+```
+ERROR 1050 (42S01): Table 'users' already exists
+```
+
+**Fix:**
+This usually happens if you run migrations multiple times. Either:
+- Continue (migrations are designed to be mostly idempotent), or
+- Reset the database completely (see "Resetting the Database" section)
+
+### 7. Frontend Shows Blank Page
+
+**Possible Causes & Fixes:**
+- Check browser console (F12) for errors
+- Verify backend is running on port 3000
+- Check `VITE_API_URL` in `frontend/.env` (if it exists)
+- Clear browser cache and reload
+- Ensure you're accessing `http://localhost:5173`, not `http://localhost:3000`
+
+### 8. CORS Errors
+
+**Error Message (in browser console):**
+```
+Access to fetch at 'http://localhost:3000' has been blocked by CORS policy
+```
+
+**Fix:**
+The backend already includes CORS middleware. Ensure:
+- Backend is running
+- You're accessing frontend via `http://localhost:5173`
+- `VITE_API_URL` points to `http://localhost:3000` (not https)
+
+---
+
+## 🧪 Testing the Application
+
+### Basic Flow Test
+
+1. **Register/Login**: Create an account or log in with seeded credentials
+2. **Browse Products**: View available listings on the marketplace
+3. **Add to Wishlist**: Save items you're interested in
+4. **Reserve Product**: As a buyer, reserve an available item
+5. **Propose Location**: As a seller, propose meeting locations
+6. **Select Location**: As a buyer, choose a meeting spot
+7. **Generate OTP**: Buyer generates OTP for exchange verification
+8. **Verify OTP**: Seller verifies OTP to complete the transaction
+9. **Check Dashboard**: View completed transactions in "My Purchases" or "Sold Items"
+10. **Gamification**: Check trust score, earned badges, and leaderboard position
+
+### Testing OTP Workflow End-to-End
+
+For the best test, simulate both buyer and seller:
+
+1. Open two browser windows (or one regular + one incognito)
+2. Log in as different users in each window
+3. In Seller window: Create a product listing
+4. In Buyer window: Reserve the product
+5. In Seller window: Navigate to dashboard, propose meeting locations
+6. In Buyer window: Select a location, generate OTP
+7. In Seller window: Enter OTP to verify and mark as sold
+8. Verify status updates in both dashboards
+
+---
+
+## 📂 Project Structure
+
+```
+campus_kart/
+├── backend/                    # Express API server
+│   ├── src/
+│   │   ├── app.js             # Entry point
+│   │   ├── db/
+│   │   │   └── index.js       # MySQL connection pool
+│   │   ├── controllers/       # Business logic
+│   │   │   ├── authController.js
+│   │   │   ├── productController.js
+│   │   │   ├── transactionController.js
+│   │   │   ├── otpController.js
+│   │   │   └── gamification.js
+│   │   ├── routes/            # API endpoints
+│   │   └── jobs/              # Background cleanup jobs
+│   ├── .env                   # Environment variables (create this)
+│   └── package.json
+│
+├── frontend/                   # React + Vite app
+│   ├── src/
+│   │   ├── App.jsx            # Main component
+│   │   ├── api.js             # API client functions
+│   │   ├── pages/             # Page components
+│   │   └── components/        # Reusable UI components
+│   ├── .env                   # Frontend config (optional)
+│   └── package.json
+│
+├── database/                   # SQL migration scripts
+│   ├── schema.sql             # Base schema
+│   ├── seed.sql               # Sample data
+│   ├── otp_tokens_migration.sql
+│   ├── location_migration.sql
+│   ├── reschedule_migration.sql
+│   └── gamification_migration.sql
+│
+└── README.md                   # This file
 ```
 
 ---
 
-## 📞 Support & Questions
+## 🔄 Optional: Seeding Sample Data
 
-Refer to:
-- [PROGRESS.md](PROGRESS.md) - For current status and detailed next steps
-- [REQUIREMENTS.md](REQUIREMENTS.md) - For functional requirements
-- [FRONTEND_TASKS.md](FRONTEND_TASKS.md) - For frontend development guide
+The `seed.sql` file already contains sample users and products. To add more:
+
+1. Create test users:
+```sql
+INSERT INTO users (name, email, password) VALUES 
+('Test User', 'test@rvce.edu.in', '$2b$10$hashedpassword');
+```
+
+2. Create test products:
+```sql
+INSERT INTO products (pname, category, price, status, preferred_for) VALUES 
+('Test Product', 'Electronics', 999.99, 'available', 'all');
+```
+
+3. Link product to seller:
+```sql
+INSERT INTO product_seller (pid, sellerid) VALUES (LAST_INSERT_ID(), 1);
+```
+
+---
+
+## 📞 Support & Contribution
+
+### GitHub Repository
+https://github.com/kushalgowdac/campus_kart
+
+### Getting Help
+- Check this README for common issues
+- Review code comments in source files
+- Check browser console (F12) for client-side errors
+- Check backend terminal for server-side errors
 
 ---
 
 ## 📄 License
 
-ISC License - See LICENSE file (if included)
+ISC License
 
 ---
 
-**Built with ❤️ for the campus community**
+**Built with ❤️ for the RVCE campus community**
 
-Last Updated: January 21, 2026
+Last Updated: January 29, 2026

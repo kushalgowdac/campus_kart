@@ -147,3 +147,29 @@ export const selectLocation = async (pid, location) => {
   const res = await fetch(`${API_URL}/api/locations/${pid}/select`, getConfig("POST", { location }));
   return handle(res);
 };
+
+// Gamification
+export const fetchGamificationMe = async () => {
+  const res = await fetch(`${API_URL}/api/gamification/me`, getConfig());
+  return handle(res);
+};
+
+export const fetchUserGamification = async (uid) => {
+  const res = await fetch(`${API_URL}/api/gamification/user/${uid}`);
+  return handle(res);
+};
+
+export const trackGamificationLogin = async () => {
+  const res = await fetch(`${API_URL}/api/gamification/login`, getConfig("POST", {}));
+  return handle(res);
+};
+
+export const fetchLeaderboard = async (limit = 10) => {
+  const res = await fetch(`${API_URL}/api/gamification/leaderboard?limit=${encodeURIComponent(limit)}`);
+  return handle(res);
+};
+
+export const createRating = async (payload) => {
+  const res = await fetch(`${API_URL}/api/gamification/ratings`, getConfig("POST", payload));
+  return handle(res);
+};

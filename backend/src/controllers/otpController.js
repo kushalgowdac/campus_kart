@@ -1,5 +1,6 @@
 import { pool } from "../db/index.js";
 import bcrypt from "bcrypt";
+import { TRUST_POINTS, addTrustPoints, computeAndAwardBadges } from "../services/gamificationService.js";
 
 /**
  * OTP Verification Controller with Security Hardening
@@ -114,6 +115,14 @@ export const verifyOTP = async (req, res, next) => {
                 [product.reserved_by, productId, saleQuantity]
             );
 
+            // Trust score updates (best-effort). Keep inside the same transaction so points follow the sale.
+            try {
+                await addTrustPoints({ uid: product.reserved_by, delta: TRUST_POINTS.PURCHASE_COMPLETED_BUYER, db: conn });
+                await addTrustPoints({ uid: product.sellerid, delta: TRUST_POINTS.PURCHASE_COMPLETED_SELLER, db: conn });
+            } catch (err) {
+                console.warn('[OTP Verify] Gamification points update failed:', err?.message || err);
+            }
+
             const [productUpdate] = await conn.query(
                 "UPDATE products SET status = 'sold', reserved_by = NULL, reserved_at = NULL, reschedule_requested_by = NULL, no_of_copies = ? WHERE pid = ?",
                 [remainingCopies, productId]
@@ -129,6 +138,14 @@ export const verifyOTP = async (req, res, next) => {
             await conn.query("DELETE FROM prod_loc WHERE pid = ?", [productId]);
 
             await conn.commit();
+
+            // Badge evaluation can happen after commit.
+            try {
+                await computeAndAwardBadges({ uid: product.reserved_by });
+                await computeAndAwardBadges({ uid: product.sellerid });
+            } catch (err) {
+                console.warn('[OTP Verify] Gamification badge award failed:', err?.message || err);
+            }
 
             return res.json({
                 success: true,

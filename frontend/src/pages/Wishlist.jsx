@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchWishlist, removeWishlistItem } from "../api";
 import { useAuth } from "../context/AuthContext";
+import Navbar from "../components/Navbar";
 
 export default function Wishlist() {
     const { currentUser } = useAuth();
@@ -39,8 +40,10 @@ export default function Wishlist() {
     if (!currentUser) return <div>Please log in to view your wishlist.</div>;
 
     return (
-        <div className="page-content">
-            <header className="hero" style={{ padding: '2rem 0' }}>
+        <>
+            <Navbar />
+            <div className="page-content">
+            <header className="hero" style={{ padding: '2rem 50' }}>
                 <div>
                     <h1>My Wishlist</h1>
                     <p className="subtext">Items you've saved for later.</p>
@@ -87,6 +90,7 @@ export default function Wishlist() {
                     </div>
                 </section>
             )}
-        </div>
+            </div>
+        </>
     );
 }

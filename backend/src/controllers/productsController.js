@@ -1,5 +1,6 @@
 import { pool } from "../db/index.js";
 import bcrypt from "bcrypt";
+import { TRUST_POINTS, addTrustPoints, computeAndAwardBadges } from "../services/gamificationService.js";
 
 
 
@@ -8,7 +9,7 @@ export const listProducts = async (req, res, next) => {
     const { category, sellerid, status, q } = req.query;
 
     let sql =
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
+      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p INNER JOIN product_seller ps ON p.pid = ps.pid INNER JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
     const params = [];
 
     if (category) {
@@ -102,6 +103,20 @@ export const createProduct = async (req, res, next) => {
     }
 
     await connection.commit();
+
+    // Best-effort trust score update for the seller.
+    // We do this after the DB commit so listing creation cannot be blocked by gamification.
+    if (sellerid) {
+      const sellerUid = Number(sellerid);
+      if (Number.isFinite(sellerUid)) {
+        try {
+          await addTrustPoints({ uid: sellerUid, delta: TRUST_POINTS.LISTING_CREATE });
+          await computeAndAwardBadges({ uid: sellerUid });
+        } catch (err) {
+          console.warn("[createProduct] Gamification award failed", err?.message || err);
+        }
+      }
+    }
 
     res.status(201).json({
       pid: result.insertId,

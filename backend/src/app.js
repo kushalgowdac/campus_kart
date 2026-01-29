@@ -19,6 +19,7 @@ import transactionsRouter from "./routes/transactions.js";
 import chatsRouter from "./routes/chats.js";
 import otpRouter from "./routes/otpRoutes.js";
 import locationRouter from "./routes/locationRoutes.js";
+import gamificationRouter from "./routes/gamification.js";
 import { authenticate } from "./middleware/auth.js";
 import { startOTPCleanup } from "./jobs/otpCleanup.js";
 
@@ -59,13 +60,32 @@ app.use("/api/transactions", transactionsRouter);
 app.use("/api/chats", chatsRouter);
 app.use("/api/otp", otpRouter);
 app.use("/api/locations", locationRouter);
+app.use("/api/gamification", gamificationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  const isMySqlError = Boolean(err && (err.code || err.sqlMessage || err.sqlState));
+  if (isMySqlError) {
+    console.error("[MySQL Error]", {
+      method: req.method,
+      path: req.originalUrl,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage,
+      sql: err.sql,
+    });
+  } else {
+    console.error("[Server Error]", {
+      method: req.method,
+      path: req.originalUrl,
+      message: err?.message,
+      stack: err?.stack,
+    });
+  }
   res.status(500).json({ error: "Server error" });
 });
 

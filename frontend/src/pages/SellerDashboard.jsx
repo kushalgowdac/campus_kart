@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchProducts, fetchTransactions, deleteProduct, updateProduct, getMyPurchases } from "../api";
 import { useAuth } from "../context/AuthContext";
+import Navbar from "../components/Navbar";
 
 const API_BASE =
     (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.replace(/\/$/, "")) ||
@@ -317,8 +318,9 @@ export default function SellerDashboard() {
 
     return (
         <>
-        <div className="page-content">
-            <header className="hero" style={{ padding: '2rem 0' }}>
+            <Navbar />
+            <div className="page-content">
+            <header className="hero" style={{ padding: '2rem 50' }}>
                 <div>
                     <h1>Dashboard</h1>
                     <p className="subtext">Manage your marketplace activity.</p>
@@ -354,8 +356,8 @@ export default function SellerDashboard() {
             ) : (
                 renderActiveTab()
             )}
-        </div>
-        {editingProduct && (
+            </div>
+            {editingProduct && (
             <div
                 style={{
                     position: 'fixed',
@@ -460,7 +462,7 @@ export default function SellerDashboard() {
                     </form>
                 </div>
             </div>
-        )}
+            )}
         </>
     );
 }

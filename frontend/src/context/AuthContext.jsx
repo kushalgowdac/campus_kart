@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { fetchUsers } from "../api";
+import { fetchGamificationMe, fetchUsers, trackGamificationLogin } from "../api";
 
 const AuthContext = createContext();
 
@@ -21,13 +21,19 @@ export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(() => getStoredUser());
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState([]);
+    const [gamification, setGamification] = useState(null);
+
+    const reloadUsers = async () => {
+        const usersData = await fetchUsers();
+        setUsers(usersData);
+        return usersData;
+    };
 
     useEffect(() => {
         // Load users and check local storage
         const initAuth = async () => {
             try {
-                const usersData = await fetchUsers();
-                setUsers(usersData);
+                const usersData = await reloadUsers();
 
                 const stored = getStoredUser();
                 if (stored) {
@@ -35,9 +41,17 @@ export const AuthProvider = ({ children }) => {
                     const validUser = usersData.find(u => u.uid === stored.uid);
                     if (validUser) {
                         setCurrentUser(validUser);
+                        try {
+                            const profile = await fetchGamificationMe();
+                            setGamification(profile);
+                        } catch (err) {
+                            // Do not block app boot on gamification.
+                            setGamification(null);
+                        }
                     } else {
                         localStorage.removeItem("campuskart_user");
                         setCurrentUser(null);
+                        setGamification(null);
                     }
                 }
             } catch (err) {
@@ -49,11 +63,34 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []);
 
-    const login = (uid) => {
+    const refreshGamification = async () => {
+        if (!getStoredUser()?.uid) {
+            setGamification(null);
+            return null;
+        }
+        const profile = await fetchGamificationMe();
+        setGamification(profile);
+        return profile;
+    };
+
+    const login = async (uid) => {
         const user = users.find((u) => u.uid === Number(uid));
         if (user) {
             setCurrentUser(user);
             localStorage.setItem("campuskart_user", JSON.stringify(user));
+
+            // Best-effort login tracking (adds trust points).
+            try {
+                await trackGamificationLogin();
+            } catch (err) {
+                // ignore
+            }
+
+            try {
+                await refreshGamification();
+            } catch {
+                // ignore
+            }
             return true;
         }
         return false;
@@ -62,6 +99,7 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         setCurrentUser(null);
         localStorage.removeItem("campuskart_user");
+        setGamification(null);
     };
 
     const value = {
@@ -69,7 +107,10 @@ export const AuthProvider = ({ children }) => {
         users,
         login,
         logout,
-        loading
+        loading,
+        reloadUsers,
+        gamification,
+        refreshGamification,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -6,6 +6,7 @@ import mysql from "mysql2/promise";
 console.log(process.env.DB_HOST);
 export const pool = mysql.createPool({
   host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
   // host: "localhost",
   user: process.env.DB_USER,
   // user : "root",
@@ -14,7 +15,8 @@ export const pool = mysql.createPool({
   database: process.env.DB_NAME,
   // database : "marketplace_db",
   waitForConnections: true,
-  connectionLimit:  10 // max 10 concurrent db connxn
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10), // max concurrent DB connections
+  timezone: "Z",
 });
 
 
