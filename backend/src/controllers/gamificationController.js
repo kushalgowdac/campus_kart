@@ -205,3 +205,42 @@ export const createRating = async (req, res, next) => {
     connection.release();
   }
 };
+
+// GET /api/gamification/ratings/:pid - Check if current user already rated this product
+export const getRatingForProduct = async (req, res, next) => {
+  try {
+    const raterUid = req.user?.uid;
+    if (!raterUid) return res.status(401).json({ error: "Authentication required" });
+
+    const pid = Number(req.params.pid);
+    if (!pid || isNaN(pid)) {
+      return res.status(400).json({ error: "Valid product ID required" });
+    }
+
+    // Check if user has already rated this product
+    const [rows] = await pool.query(
+      `SELECT rating, comment, created_at 
+       FROM user_ratings 
+       WHERE pid = ? AND rater_uid = ?
+       LIMIT 1`,
+      [pid, raterUid]
+    );
+
+    if (rows.length > 0) {
+      // User has already rated
+      return res.json({
+        alreadyRated: true,
+        rating: rows[0].rating,
+        comment: rows[0].comment,
+        ratedAt: rows[0].created_at
+      });
+    } else {
+      // User has not rated yet
+      return res.json({
+        alreadyRated: false
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+};

@@ -36,6 +36,64 @@ export const listProducts = async (req, res, next) => {
   }
 };
 
+export const searchProducts = async (req, res, next) => {
+  try {
+    const { category, sortPrice } = req.query;
+
+    // Validate sortPrice if provided
+    if (sortPrice && !['asc', 'desc'].includes(sortPrice)) {
+      return res.status(400).json({ error: "sortPrice must be 'asc' or 'desc'" });
+    }
+
+    // Build dynamic SQL query with JOINs
+    let sql = `
+      SELECT 
+        p.pid, 
+        p.pname, 
+        p.category, 
+        p.price, 
+        p.status, 
+        p.bought_year, 
+        p.preferred_for, 
+        p.no_of_copies, 
+        p.reserved_by, 
+        p.reserved_at, 
+        ps.sellerid, 
+        u.name AS seller_name,
+        u.email AS seller_email,
+        u.trust_points,
+        pi.img_url 
+      FROM products p
+      INNER JOIN product_seller ps ON p.pid = ps.pid
+      INNER JOIN users u ON ps.sellerid = u.uid
+      LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    // Apply category filter if provided
+    if (category) {
+      sql += " AND p.category = ?";
+      params.push(category);
+    }
+
+    // Apply sorting
+    if (sortPrice === 'asc') {
+      sql += " ORDER BY p.price ASC";
+    } else if (sortPrice === 'desc') {
+      sql += " ORDER BY p.price DESC";
+    } else {
+      sql += " ORDER BY p.created_at DESC"; // Default: newest first
+    }
+
+    const [rows] = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;

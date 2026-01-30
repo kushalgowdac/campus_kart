@@ -7,6 +7,8 @@ import ProductDetails from "./pages/ProductDetails";
 import SellerDashboard from "./pages/SellerDashboard";
 import SellerProfile from "./pages/SellerProfile";
 import Wishlist from "./pages/Wishlist";
+import Navbar from "./components/Navbar";
+import Chatbot from "./components/Chatbot";
 import "./styles.css";
 
 const ProtectedRoute = () => {
@@ -21,16 +23,20 @@ const AppLayout = () => {
 
   return (
     <div className={isAuthPortal ? "page page--full" : "page"}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/product/:id" element={<ProductDetails />} />
-          <Route path="/dashboard" element={<SellerDashboard />} />
-          <Route path="/seller/:sellerId" element={<SellerProfile />} />
-          <Route path="/wishlist" element={<Wishlist />} />
-        </Route>
-      </Routes>
+      {!isAuthPortal && <Navbar />}
+      <div className={isAuthPortal ? "" : "container"}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/product/:id" element={<ProductDetails />} />
+            <Route path="/dashboard" element={<SellerDashboard />} />
+            <Route path="/seller/:sellerId" element={<SellerProfile />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+          </Route>
+        </Routes>
+      </div>
+      {!isAuthPortal && <Chatbot />}
     </div>
   );
 };

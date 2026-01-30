@@ -36,6 +36,24 @@ export const fetchProducts = async (query = "") => {
   return handle(res);
 };
 
+export const searchProducts = async (filters) => {
+  const params = new URLSearchParams();
+
+  // Only include category and sortPrice
+  if (filters.category) {
+    params.append('category', filters.category);
+  }
+  if (filters.sortPrice) {
+    params.append('sortPrice', filters.sortPrice);
+  }
+  const queryString = params.toString();
+  const url = queryString
+    ? `${API_URL}/api/products/search?${queryString}`
+    : `${API_URL}/api/products/search`;
+  const res = await fetch(url);
+  return handle(res);
+};
+
 export const fetchProductById = async (id) => {
   const res = await fetch(`${API_URL}/api/products/${id}`);
   return handle(res);
@@ -171,5 +189,10 @@ export const fetchLeaderboard = async (limit = 10) => {
 
 export const createRating = async (payload) => {
   const res = await fetch(`${API_URL}/api/gamification/ratings`, getConfig("POST", payload));
+  return handle(res);
+};
+
+export const checkRatingStatus = async (pid) => {
+  const res = await fetch(`${API_URL}/api/gamification/ratings/${pid}`, getConfig("GET"));
   return handle(res);
 };

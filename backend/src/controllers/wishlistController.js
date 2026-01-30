@@ -3,8 +3,13 @@ import { pool } from "../db/index.js";
 export const listWishlist = async (req, res, next) => {
   try {
     const { uid } = req.query;
-    let sql =
-      "SELECT w.uid, w.pid, p.pname, p.price, p.status FROM add_to_wishlist w LEFT JOIN products p ON w.pid = p.pid WHERE 1=1";
+    let sql = `
+      SELECT w.uid, w.pid, p.pname, p.price, p.status,
+             (SELECT img_url FROM prod_img WHERE pid = w.pid LIMIT 1) as img_url
+      FROM add_to_wishlist w 
+      LEFT JOIN products p ON w.pid = p.pid 
+      WHERE 1=1
+    `;
     const params = [];
     if (uid) {
       sql += " AND w.uid = ?";

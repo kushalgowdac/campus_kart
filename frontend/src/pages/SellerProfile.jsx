@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProducts } from "../api";
 import { useAuth } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
 import BadgesRow from "../components/BadgesRow";
 
 export default function SellerProfile() {
@@ -53,99 +52,96 @@ export default function SellerProfile() {
     }, [sellerId]);
 
     return (
-        <>
-            <Navbar />
-            <div className="page-content">
-                <header className="hero">
-                    <div>
-                        <Link to="/" className="ghost" style={{ marginBottom: 16, display: "inline-block" }}>
-                            ← Back to Home
-                        </Link>
-                        {seller && (
-                            <>
-                                <h1>{seller.name}'s Store</h1>
-                                {seller.email && (
-                                    <p className="muted" style={{ marginTop: 8 }}>
-                                        {seller.email}
-                                    </p>
-                                )}
-                            </>
-                        )}
-                    </div>
-                </header>
+        <div className="page-content">
+            <header className="hero">
+                <div>
+                    <Link to="/" className="ghost" style={{ marginBottom: 16, display: "inline-block" }}>
+                        ← Back to Home
+                    </Link>
+                    {seller && (
+                        <>
+                            <h1>{seller.name}'s Store</h1>
+                            {seller.email && (
+                                <p className="muted" style={{ marginTop: 8 }}>
+                                    {seller.email}
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+            </header>
 
-                {error && (
-                    <div className="status error" style={{ margin: "1rem 0" }}>
-                        {error}
-                    </div>
-                )}
+            {error && (
+                <div className="status error" style={{ margin: "1rem 0" }}>
+                    {error}
+                </div>
+            )}
 
-                {loading ? (
-                    <p className="muted">Loading seller's products...</p>
-                ) : (
-                    <section className="card list">
-                        <div className="list-header">
-                            <div>
-                                <h2 style={{ marginBottom: "0.25rem" }}>Available Products</h2>
-                                <span className="muted" style={{ fontSize: "0.9rem" }}>
-                                    {products.length} listing(s) available for purchase
-                                </span>
-                            </div>
+            {loading ? (
+                <p className="muted">Loading seller's products...</p>
+            ) : (
+                <section className="card list">
+                    <div className="list-header">
+                        <div>
+                            <h2 style={{ marginBottom: "0.25rem" }}>Available Products</h2>
+                            <span className="muted" style={{ fontSize: "0.9rem" }}>
+                                {products.length} listing(s) available for purchase
+                            </span>
                         </div>
+                    </div>
 
-                        {products.length === 0 ? (
-                            <p className="muted" style={{ marginTop: 16 }}>
-                                This seller has no available products at the moment.
-                            </p>
-                        ) : (
-                            <div className="list-grid">
-                                {products.map((item) => (
-                                    <article key={item.pid} className="item">
+                    {products.length === 0 ? (
+                        <p className="muted" style={{ marginTop: 16 }}>
+                            This seller has no available products at the moment.
+                        </p>
+                    ) : (
+                        <div className="list-grid">
+                            {products.map((item) => (
+                                <article key={item.pid} className="item">
+                                    <Link
+                                        to={`/product/${item.pid}`}
+                                        style={{ textDecoration: "none", color: "inherit", display: "block", flex: 1 }}
+                                    >
+                                        {item.img_url ? (
+                                            <img src={item.img_url} alt={item.pname} className="thumb" />
+                                        ) : (
+                                            <div className="thumb placeholder">No image</div>
+                                        )}
+                                        <div className="item-body">
+                                            <h3>{item.pname}</h3>
+                                            <p className="muted">Category: {item.category || "—"}</p>
+                                            {item.bought_year && (
+                                                <p className="muted">Bought: {item.bought_year}</p>
+                                            )}
+                                            {item.preferred_for && item.preferred_for !== "all" && (
+                                                <p className="muted">Preferred for: {item.preferred_for} year</p>
+                                            )}
+                                        </div>
+                                    </Link>
+
+                                    <div className="item-actions" style={{ padding: "0 1rem 1rem" }}>
+                                        <div className="item-meta" style={{ marginBottom: "0.5rem" }}>
+                                            <span className={`badge ${item.status}`}>{item.status}</span>
+                                            <p>₹ {item.price}</p>
+                                        </div>
                                         <Link
                                             to={`/product/${item.pid}`}
-                                            style={{ textDecoration: "none", color: "inherit", display: "block", flex: 1 }}
+                                            className="ghost"
+                                            style={{
+                                                textDecoration: "none",
+                                                padding: "0.5rem 1rem",
+                                                display: "inline-block"
+                                            }}
                                         >
-                                            {item.img_url ? (
-                                                <img src={item.img_url} alt={item.pname} className="thumb" />
-                                            ) : (
-                                                <div className="thumb placeholder">No image</div>
-                                            )}
-                                            <div className="item-body">
-                                                <h3>{item.pname}</h3>
-                                                <p className="muted">Category: {item.category || "—"}</p>
-                                                {item.bought_year && (
-                                                    <p className="muted">Bought: {item.bought_year}</p>
-                                                )}
-                                                {item.preferred_for && item.preferred_for !== "all" && (
-                                                    <p className="muted">Preferred for: {item.preferred_for} year</p>
-                                                )}
-                                            </div>
+                                            View Details
                                         </Link>
-
-                                        <div className="item-actions" style={{ padding: "0 1rem 1rem" }}>
-                                            <div className="item-meta" style={{ marginBottom: "0.5rem" }}>
-                                                <span className={`badge ${item.status}`}>{item.status}</span>
-                                                <p>₹ {item.price}</p>
-                                            </div>
-                                            <Link
-                                                to={`/product/${item.pid}`}
-                                                className="ghost"
-                                                style={{
-                                                    textDecoration: "none",
-                                                    padding: "0.5rem 1rem",
-                                                    display: "inline-block"
-                                                }}
-                                            >
-                                                View Details
-                                            </Link>
-                                        </div>
-                                    </article>
-                                ))}
-                            </div>
-                        )}
-                    </section>
-                )}
-            </div>
-        </>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            )}
+        </div>
     );
 }

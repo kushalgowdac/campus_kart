@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   listProducts,
+  searchProducts,
   getProductById,
   createProduct,
   updateProduct,
@@ -35,6 +36,7 @@ router.post("/:id/reschedule", rescheduleProduct);
 router.post("/:id/reschedule/reject", rejectReschedule);
 
 // Standard CRUD
+router.get("/search", searchProducts); // Specific route first
 router.get("/", listProducts);
 router.get("/:id", getProductById);
 router.post("/", createProduct);

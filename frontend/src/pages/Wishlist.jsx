@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchWishlist, removeWishlistItem } from "../api";
 import { useAuth } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
 
 export default function Wishlist() {
     const { currentUser } = useAuth();
@@ -40,10 +39,8 @@ export default function Wishlist() {
     if (!currentUser) return <div>Please log in to view your wishlist.</div>;
 
     return (
-        <>
-            <Navbar />
-            <div className="page-content">
-            <header className="hero" style={{ padding: '2rem 50' }}>
+        <div className="page-content">
+            <header className="hero">
                 <div>
                     <h1>My Wishlist</h1>
                     <p className="subtext">Items you've saved for later.</p>
@@ -73,7 +70,16 @@ export default function Wishlist() {
                         {wishlist.map((item) => (
                             <article key={item.pid} className="item">
                                 <Link to={`/product/${item.pid}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', flex: 1 }}>
-                                    <div className="thumb placeholder">No image</div>
+                                    {item.img_url ? (
+                                        <img
+                                            src={item.img_url}
+                                            alt={item.pname}
+                                            className="thumb"
+                                            style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px' }}
+                                        />
+                                    ) : (
+                                        <div className="thumb placeholder">No image</div>
+                                    )}
                                     <div className="item-body">
                                         <h3>{item.pname}</h3>
                                         <p className="muted">{item.status}</p>
@@ -90,7 +96,6 @@ export default function Wishlist() {
                     </div>
                 </section>
             )}
-            </div>
-        </>
+        </div>
     );
 }

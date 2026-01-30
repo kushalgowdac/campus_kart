@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchProducts, fetchTransactions, deleteProduct, updateProduct, getMyPurchases } from "../api";
 import { useAuth } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
 
 const API_BASE =
     (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.replace(/\/$/, "")) ||
@@ -317,10 +316,8 @@ export default function SellerDashboard() {
     if (!currentUser) return <div>Please log in.</div>;
 
     return (
-        <>
-            <Navbar />
-            <div className="page-content">
-            <header className="hero" style={{ padding: '2rem 50' }}>
+        <div className="page-content">
+            <header className="hero">
                 <div>
                     <h1>Dashboard</h1>
                     <p className="subtext">Manage your marketplace activity.</p>
@@ -356,113 +353,113 @@ export default function SellerDashboard() {
             ) : (
                 renderActiveTab()
             )}
-            </div>
+
             {editingProduct && (
-            <div
-                style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    background: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000,
-                    padding: '1rem',
-                }}
-            >
-                <div className="card" style={{ maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3 style={{ margin: 0 }}>Edit Listing</h3>
-                        <button className="ghost" onClick={closeEdit} type="button">
-                            Close
-                        </button>
-                    </div>
-                    <form onSubmit={handleEditSubmit} className="form-grid" style={{ display: 'grid', gap: '0.75rem' }}>
-                        <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span>Product name</span>
-                            <input
-                                type="text"
-                                name="pname"
-                                value={editForm.pname}
-                                onChange={handleEditChange}
-                                required
-                            />
-                        </label>
-                        <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span>Category</span>
-                            <input
-                                type="text"
-                                name="category"
-                                value={editForm.category}
-                                onChange={handleEditChange}
-                                placeholder="e.g. Books"
-                            />
-                        </label>
-                        <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span>Price (₹)</span>
-                            <input
-                                type="number"
-                                min="0"
-                                name="price"
-                                value={editForm.price}
-                                onChange={handleEditChange}
-                                required
-                            />
-                        </label>
-                        <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span>Image URL</span>
-                            <input
-                                type="text"
-                                name="img_url"
-                                value={editForm.img_url}
-                                onChange={handleEditChange}
-                                placeholder="https://... or dbmstb.jpg"
-                            />
-                        </label>
-                        <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span>Preferred for</span>
-                            <input
-                                type="text"
-                                name="preferred_for"
-                                value={editForm.preferred_for}
-                                onChange={handleEditChange}
-                                placeholder="Ideal buyer profile"
-                            />
-                        </label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        padding: '1rem',
+                    }}
+                >
+                    <div className="card" style={{ maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 style={{ margin: 0 }}>Edit Listing</h3>
+                            <button className="ghost" onClick={closeEdit} type="button">
+                                Close
+                            </button>
+                        </div>
+                        <form onSubmit={handleEditSubmit} className="form-grid" style={{ display: 'grid', gap: '0.75rem' }}>
                             <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                <span>Bought year</span>
+                                <span>Product name</span>
                                 <input
-                                    type="number"
-                                    name="bought_year"
-                                    min="2000"
-                                    max={new Date().getFullYear()}
-                                    value={editForm.bought_year}
+                                    type="text"
+                                    name="pname"
+                                    value={editForm.pname}
                                     onChange={handleEditChange}
+                                    required
                                 />
                             </label>
-                            <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                <span>Units</span>
-                                <p className="muted" style={{ margin: 0 }}>
-                                    Single-unit listings only. Duplicate the listing if you have more items.
-                                </p>
+                            <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <span>Category</span>
+                                <input
+                                    type="text"
+                                    name="category"
+                                    value={editForm.category}
+                                    onChange={handleEditChange}
+                                    placeholder="e.g. Books"
+                                />
+                            </label>
+                            <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <span>Price (₹)</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    name="price"
+                                    value={editForm.price}
+                                    onChange={handleEditChange}
+                                    required
+                                />
+                            </label>
+                            <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <span>Image URL</span>
+                                <input
+                                    type="text"
+                                    name="img_url"
+                                    value={editForm.img_url}
+                                    onChange={handleEditChange}
+                                    placeholder="https://... or dbmstb.jpg"
+                                />
+                            </label>
+                            <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <span>Preferred for</span>
+                                <input
+                                    type="text"
+                                    name="preferred_for"
+                                    value={editForm.preferred_for}
+                                    onChange={handleEditChange}
+                                    placeholder="Ideal buyer profile"
+                                />
+                            </label>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                                <label className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <span>Bought year</span>
+                                    <input
+                                        type="number"
+                                        name="bought_year"
+                                        min="2000"
+                                        max={new Date().getFullYear()}
+                                        value={editForm.bought_year}
+                                        onChange={handleEditChange}
+                                    />
+                                </label>
+                                <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <span>Units</span>
+                                    <p className="muted" style={{ margin: 0 }}>
+                                        Single-unit listings only. Duplicate the listing if you have more items.
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
-                            <button className="ghost" type="button" onClick={closeEdit}>
-                                Cancel
-                            </button>
-                            <button type="submit" disabled={savingEdit}>
-                                {savingEdit ? "Saving..." : "Save changes"}
-                            </button>
-                        </div>
-                    </form>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                                <button className="ghost" type="button" onClick={closeEdit}>
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={savingEdit}>
+                                    {savingEdit ? "Saving..." : "Save changes"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </div>
             )}
-        </>
+        </div>
     );
 }
