@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { createRating, getMe, getUserGamification, leaderboard, trackLogin, getRatingForProduct } from "../controllers/gamificationController.js";
+import { createRating, getMe, getUserGamification, leaderboard, trackLogin, getRatingForProduct, getBadgesCatalog } from "../controllers/gamificationController.js";
 
 const router = Router();
 
@@ -15,6 +15,9 @@ router.post("/login", requireAuth, trackLogin);
 
 // Public leaderboard
 router.get("/leaderboard", leaderboard);
+
+// Public badges catalog
+router.get("/badges", getBadgesCatalog);
 
 // Check if current user already rated a product
 router.get("/ratings/:pid", requireAuth, getRatingForProduct);

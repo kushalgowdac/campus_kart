@@ -40,11 +40,10 @@ export default function SearchFilters({ onFilterChange, onClear }) {
                     >
                         <option value="">All Categories</option>
                         <option value="Books">Books</option>
-                        <option value="Electronics">Electronics</option>
                         <option value="Furniture">Furniture</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Sports">Sports</option>
-                        <option value="Other">Other</option>
+                        <option value="Equipments">Equipments</option>
+                        <option value="Gadgets">Gadgets</option>
+                        <option value="Electronics">Electronics</option>
                     </select>
                 </div>
 

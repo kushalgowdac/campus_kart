@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchWishlist, removeWishlistItem } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { resolveImageUrl } from "../utils/images";
 
 export default function Wishlist() {
     const { currentUser } = useAuth();
@@ -40,7 +41,7 @@ export default function Wishlist() {
 
     return (
         <div className="page-content">
-            <header className="hero">
+            <header className="page-header">
                 <div>
                     <h1>My Wishlist</h1>
                     <p className="subtext">Items you've saved for later.</p>
@@ -54,8 +55,9 @@ export default function Wishlist() {
             {loading ? (
                 <div className="card">Loading...</div>
             ) : wishlist.length === 0 ? (
-                <div className="card">
-                    <p className="muted">Your wishlist is empty. Start adding items you like!</p>
+                <div className="empty-state">
+                    <h3>Your wishlist is empty</h3>
+                    <p>Start adding items you like and they'll show up here.</p>
                     <Link to="/" style={{ textDecoration: 'none' }}>
                         <button style={{ marginTop: '1rem' }}>Browse Products</button>
                     </Link>
@@ -72,7 +74,7 @@ export default function Wishlist() {
                                 <Link to={`/product/${item.pid}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', flex: 1 }}>
                                     {item.img_url ? (
                                         <img
-                                            src={item.img_url}
+                                            src={resolveImageUrl(item.img_url)}
                                             alt={item.pname}
                                             className="thumb"
                                             style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px' }}

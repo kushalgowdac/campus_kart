@@ -30,6 +30,21 @@ export const addWishlistItem = async (req, res, next) => {
       return res.status(400).json({ error: "uid, pid required" });
     }
 
+    const [sellerRows] = await pool.query(
+      "SELECT sellerid FROM product_seller WHERE pid = ?",
+      [pid]
+    );
+
+    if (sellerRows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    if (Number(sellerRows[0].sellerid) === Number(uid)) {
+      return res
+        .status(400)
+        .json({ error: "You cannot add your own product to wishlist" });
+    }
+
     // Check if item already exists in wishlist
     const [existing] = await pool.query(
       "SELECT * FROM add_to_wishlist WHERE uid = ? AND pid = ?",

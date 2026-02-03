@@ -126,3 +126,176 @@ export const listMyPurchases = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Analytics Endpoints (Admin)
+ */
+
+// Time-series analytics: transactions by hour/day/month
+export const getTimeSeries = async (req, res, next) => {
+  try {
+    const { period = 'day', limit = 30 } = req.query;
+
+    let sql;
+    if (period === 'hour') {
+      sql = `
+        SELECT 
+          DATE_FORMAT(time_of_purchase, '%Y-%m-%d %H:00:00') as period,
+          COUNT(*) as transaction_count,
+          SUM(p.price) as revenue
+        FROM transaction t
+        INNER JOIN products p ON t.pid = p.pid
+        WHERE t.time_of_purchase >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        GROUP BY period
+        ORDER BY period DESC
+      `;
+    } else if (period === 'day') {
+      sql = `
+        SELECT 
+          DATE(time_of_purchase) as period,
+          COUNT(*) as transaction_count,
+          SUM(p.price) as revenue
+        FROM transaction t
+        INNER JOIN products p ON t.pid = p.pid
+        WHERE t.time_of_purchase >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        GROUP BY period
+        ORDER BY period DESC
+      `;
+    } else if (period === 'month') {
+      sql = `
+        SELECT 
+          DATE_FORMAT(time_of_purchase, '%Y-%m') as period,
+          COUNT(*) as transaction_count,
+          SUM(p.price) as revenue
+        FROM transaction t
+        INNER JOIN products p ON t.pid = p.pid
+        GROUP BY period
+        ORDER BY period DESC
+        LIMIT ?
+      `;
+    }
+
+    const params = period === 'hour' ? [] : [parseInt(limit)];
+    const [rows] = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Category analytics: which categories sell most
+export const getCategoryAnalytics = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        p.category,
+        COUNT(DISTINCT p.pid) as products_count,
+        COUNT(t.tid) as transactions_count,
+        SUM(p.price) as total_revenue,
+        AVG(p.price) as avg_price
+      FROM products p
+      LEFT JOIN transaction t ON p.pid = t.pid
+      WHERE p.category IS NOT NULL AND p.category != ''
+      GROUP BY p.category
+      ORDER BY transactions_count DESC, total_revenue DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// User year analytics: which year students buy/sell more
+export const getYearAnalytics = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        p.preferred_for as year,
+        COUNT(DISTINCT p.pid) as products_count,
+        COUNT(t.tid) as transactions_count,
+        SUM(p.price) as total_revenue
+      FROM products p
+      LEFT JOIN transaction t ON p.pid = t.pid
+      WHERE p.preferred_for IS NOT NULL AND p.preferred_for != ''
+      GROUP BY p.preferred_for
+      ORDER BY transactions_count DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Conversion funnel: available → reserved → location_selected → otp_generated → sold
+export const getConversionFunnel = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM products
+      GROUP BY status
+      ORDER BY FIELD(status, 'available', 'reserved', 'location_proposed', 'location_selected', 'otp_generated', 'sold')
+    `);
+
+    const [otpStats] = await pool.query(`
+      SELECT 
+        COUNT(*) as total_otps,
+        SUM(CASE WHEN used = true THEN 1 ELSE 0 END) as used_otps
+      FROM otp_tokens
+    `);
+
+    res.json({
+      funnel: rows,
+      otp_conversion: otpStats[0]
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Export transactions to CSV
+export const exportTransactionsCSV = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        t.tid,
+        t.time_of_purchase,
+        bu.name as buyer_name,
+        bu.email as buyer_email,
+        seller.name as seller_name,
+        seller.email as seller_email,
+        p.pname,
+        p.category,
+        p.price,
+        t.quantity,
+        t.status
+      FROM transaction t
+      INNER JOIN products p ON t.pid = p.pid
+      INNER JOIN users bu ON t.buyerid = bu.uid
+      INNER JOIN product_seller ps ON p.pid = ps.pid
+      INNER JOIN users seller ON ps.sellerid = seller.uid
+      ORDER BY t.time_of_purchase DESC
+    `);
+
+    // Convert to CSV
+    const headers = Object.keys(rows[0] || {});
+    const csvRows = [headers.join(',')];
+    
+    for (const row of rows) {
+      const values = headers.map(header => {
+        const value = row[header];
+        return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value;
+      });
+      csvRows.push(values.join(','));
+    }
+
+    const csv = csvRows.join('\n');
+    res.header('Content-Type', 'text/csv');
+    res.header('Content-Disposition', 'attachment; filename=transactions.csv');
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+};
+

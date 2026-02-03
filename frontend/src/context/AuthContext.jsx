@@ -24,9 +24,15 @@ export const AuthProvider = ({ children }) => {
     const [gamification, setGamification] = useState(null);
 
     const reloadUsers = async () => {
-        const usersData = await fetchUsers();
-        setUsers(usersData);
-        return usersData;
+        try {
+            const usersData = await fetchUsers();
+            setUsers(usersData);
+            return usersData;
+        } catch (err) {
+            console.warn("Failed to load users", err);
+            setUsers([]);
+            return [];
+        }
     };
 
     useEffect(() => {

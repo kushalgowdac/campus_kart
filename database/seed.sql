@@ -45,16 +45,16 @@ INSERT INTO prod_spec (pid, spec_name, spec_value) VALUES
 (10, 'Sheets', '50');
 
 INSERT INTO prod_img (pid, img_url) VALUES
-(1, 'https://example.com/images/calc.jpg'),
-(2, 'https://example.com/images/ds-book.jpg'),
-(3, 'https://example.com/images/lab-coat.jpg'),
-(4, 'https://example.com/images/lab-kit.jpg'),
-(5, 'https://example.com/images/drawing-set.jpg'),
-(6, 'https://example.com/images/c-book.jpg'),
-(7, 'https://example.com/images/multimeter.jpg'),
-(8, 'https://example.com/images/pendrive.jpg'),
-(9, 'https://example.com/images/apron.jpg'),
-(10, 'https://example.com/images/graph-sheets.jpg');
+(1, '/images/Casio%20fx-300ES%20Plus.jpg'),
+(2, '/images/dbms_textbook.jpg'),
+(3, '/images/lab_coat.png'),
+(4, '/images/esp32.jpg'),
+(5, '/images/cprog_dennis_richie.jpg'),
+(6, '/images/cprog_dennis_richie.jpg'),
+(7, '/images/esp32.jpg'),
+(8, '/images/phone1.jpg'),
+(9, '/images/lab_coat.png'),
+(10, '/images/dbms_textbook.jpg');
 
 INSERT INTO prod_loc (pid, location) VALUES
 (1, 'Kriyakalpa'),

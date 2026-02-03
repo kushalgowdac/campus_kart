@@ -1,12 +1,13 @@
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
     fetchProducts,
     searchProducts,
     createProduct,
     createProductSpec,
     addWishlist,
+    removeWishlistItem,
     fetchLeaderboard,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -21,11 +22,9 @@ const initialProduct = {
     price: "",
     status: "available",
     bought_year: "",
-    preferred_for: "all",
+    preferred_for: "",
     no_of_copies: 1,
     image_url: "",
-    spec_name: "",
-    spec_value: "",
 };
 
 const MARKET_FILTERS = [
@@ -33,11 +32,15 @@ const MARKET_FILTERS = [
     { value: "cart", label: "Cart" },
 ];
 
+const PAGE_SIZE = 12;
+
 export default function Home() {
     const { currentUser, gamification } = useAuth();
+    const location = useLocation();
     const [products, setProducts] = useState([]);
     const [query, setQuery] = useState("");
     const [form, setForm] = useState(initialProduct);
+    const [specs, setSpecs] = useState([{ spec_name: "", spec_value: "" }]);
     const [view, setView] = useState("buy");
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState({ type: "", message: "" });
@@ -46,12 +49,12 @@ export default function Home() {
         category: "",
         sortPrice: ""
     });
-
-    const [showLeaderboard, setShowLeaderboard] = useState(false);
-    const [showBadges, setShowBadges] = useState(false);
-
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    const [createdListing, setCreatedListing] = useState(null);
+    const resultsRef = useRef(null);
     const [leaderboard, setLeaderboard] = useState([]);
     const [leaderboardError, setLeaderboardError] = useState("");
+
 
     // Wishlist state - track items in wishlist
     const [wishlistItems, setWishlistItems] = useState(() => {
@@ -62,10 +65,6 @@ export default function Home() {
     // Toast notification state
     const [toast, setToast] = useState(null);
 
-    const queryString = useMemo(() => {
-        return query ? `?q=${encodeURIComponent(query)}` : "";
-    }, [query]);
-
     // Helper to check if any filters are active
     const hasActiveFilters = (filterObj) => {
         return filterObj.category || filterObj.sortPrice;
@@ -75,10 +74,13 @@ export default function Home() {
         setLoading(true);
         try {
             // Use regular fetchProducts if no filters, otherwise use search
-            const data = hasActiveFilters(filters)
-                ? await searchProducts(filters)
+            const data = hasActiveFilters(filters) || query
+                ? await searchProducts({ ...filters, q: query })
                 : await fetchProducts("");
             setProducts(data);
+            if (query || hasActiveFilters(filters)) {
+                setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+            }
         } catch (err) {
             setStatus({ type: "error", message: err.message });
         } finally {
@@ -89,6 +91,39 @@ export default function Home() {
     useEffect(() => {
         loadProducts();
     }, []);
+
+    useEffect(() => {
+        const loadLeaderboard = async () => {
+            try {
+                const rows = await fetchLeaderboard(10);
+                setLeaderboard(rows);
+                setLeaderboardError("");
+            } catch (err) {
+                setLeaderboardError(err.message || "Failed to load leaderboard");
+            }
+        };
+        loadLeaderboard();
+    }, []);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const viewParam = params.get("view");
+        if (viewParam === "sell") {
+            setView("sell");
+        } else {
+            setView("buy");
+        }
+    }, [location.search]);
+
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE);
+    }, [filters.category, filters.sortPrice, query, marketFilter, view]);
+
+    useEffect(() => {
+        if (!createdListing) return;
+        const timer = setTimeout(() => setCreatedListing(null), 10000);
+        return () => clearTimeout(timer);
+    }, [createdListing]);
 
     const handleFilterChange = (newFilters) => {
         console.log('🎛️  Filter change detected:', newFilters);
@@ -105,18 +140,6 @@ export default function Home() {
         // Products will update automatically via useMemo
     };
 
-    useEffect(() => {
-        const loadLeaderboard = async () => {
-            try {
-                const rows = await fetchLeaderboard(10);
-                setLeaderboard(rows);
-                setLeaderboardError("");
-            } catch (err) {
-                setLeaderboardError(err.message);
-            }
-        };
-        loadLeaderboard();
-    }, []);
 
     const availableProducts = useMemo(() =>
         products.filter((item) => (item.status || "").toLowerCase() === "available"),
@@ -202,6 +225,10 @@ export default function Home() {
                 : "Log in to view cart"
             : `${sortedProducts.length} single-unit listings`;
 
+    const displayedProducts = marketFilter === "cart"
+        ? sortedProducts
+        : sortedProducts.slice(0, visibleCount);
+
     const handleChange = (setter) => (e) => {
         const { name, value } = e.target;
         setter((prev) => ({ ...prev, [name]: value }));
@@ -210,6 +237,25 @@ export default function Home() {
     const handleNumberChange = (setter) => (e) => {
         const { name, value } = e.target;
         setter((prev) => ({ ...prev, [name]: value === "" ? "" : Number(value) }));
+    };
+
+    const addSpecRow = () => {
+        setSpecs((prev) => [...prev, { spec_name: "", spec_value: "" }]);
+    };
+
+    const updateSpecRow = (index, field, value) => {
+        setSpecs((prev) =>
+            prev.map((spec, i) => (i === index ? { ...spec, [field]: value } : spec))
+        );
+    };
+
+    const removeSpecRow = (index) => {
+        setSpecs((prev) => {
+            if (prev.length === 1) {
+                return [{ spec_name: "", spec_value: "" }];
+            }
+            return prev.filter((_, i) => i !== index);
+        });
     };
 
     const submitProduct = async (e) => {
@@ -234,17 +280,35 @@ export default function Home() {
                 sellerid: Number(currentUser.uid),
             });
 
-            if (form.spec_name && form.spec_value) {
-                await createProductSpec({
-                    pid: created.pid,
-                    spec_name: form.spec_name,
-                    spec_value: form.spec_value,
-                });
+            const specsToSave = specs
+                .map((spec) => ({
+                    spec_name: spec.spec_name.trim(),
+                    spec_value: spec.spec_value.trim(),
+                }))
+                .filter((spec) => spec.spec_name && spec.spec_value);
+
+            if (specsToSave.length) {
+                await Promise.all(
+                    specsToSave.map((spec) =>
+                        createProductSpec({
+                            pid: created.pid,
+                            spec_name: spec.spec_name,
+                            spec_value: spec.spec_value,
+                        })
+                    )
+                );
             }
             setForm(initialProduct);
+            setSpecs([{ spec_name: "", spec_value: "" }]);
             await loadProducts();
-            setStatus({ type: "success", message: "Product created" });
+            setCreatedListing({
+                pid: created.pid,
+                pname: created.pname,
+                verification_status: created.verification_status || "pending",
+            });
+                setStatus({ type: "", message: "" });
             setView("buy");
+            setMarketFilter("available");
         } catch (err) {
             setStatus({ type: "error", message: err.message });
         }
@@ -260,10 +324,15 @@ export default function Home() {
 
         if (isInWishlist) {
             // Remove from wishlist
-            const updated = wishlistItems.filter(id => id !== pid);
-            setWishlistItems(updated);
-            localStorage.setItem('campuskart_wishlist', JSON.stringify(updated));
-            setToast({ type: "success", message: "Removed from wishlist" });
+            try {
+                await removeWishlistItem(Number(currentUser.uid), Number(pid));
+                const updated = wishlistItems.filter(id => id !== pid);
+                setWishlistItems(updated);
+                localStorage.setItem('campuskart_wishlist', JSON.stringify(updated));
+                setToast({ type: "success", message: "Removed from wishlist" });
+            } catch (err) {
+                setToast({ type: "error", message: err.message || "Failed to remove from wishlist" });
+            }
         } else {
             // Add to wishlist
             try {
@@ -285,239 +354,130 @@ export default function Home() {
             {status.message && (
                 <div className={`status ${status.type}`}>{status.message}</div>
             )}
-
-            <header className="hero">
-                <div>
-                    <h1>Welcome back, {currentUser?.name}</h1>
-                    <p className="subtext">
-                        Browse listings or create a new one.
-                    </p>
-                    <div className="tab-row">
-                        <button
-                            className={view === "buy" ? "tab active" : "tab"}
-                            onClick={() => setView("buy")}
-                            type="button"
-                        >
-                            Buy
-                        </button>
-                        <button
-                            className={view === "sell" ? "tab active" : "tab"}
-                            onClick={() => setView("sell")}
-                            type="button"
-                        >
-                            Sell
-                        </button>
-                    </div>
-                </div>
-                <div style={{ display: "grid", gap: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                        <button
-                            type="button"
-                            className={`leaderboard-icon-btn ${showBadges ? "active" : ""}`}
-                            onClick={() => setShowBadges((prev) => !prev)}
-                            aria-label={showBadges ? "Hide badges" : "Show badges"}
-                            title={showBadges ? "Hide badges" : "Show badges"}
-                        >
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                                aria-hidden="true"
-                                focusable="false"
-                            >
-                                <path
-                                    d="M12 15C15.866 15 19 11.866 19 8C19 4.13401 15.866 1 12 1C8.13401 1 5 4.13401 5 8C5 11.866 8.13401 15 12 15Z"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                                <path
-                                    d="M8.21 13.89L7 23L12 20L17 23L15.79 13.88"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                            </svg>
-                        </button>
-                        <button
-                            type="button"
-                            className={`leaderboard-icon-btn ${showLeaderboard ? "active" : ""}`}
-                            onClick={() => setShowLeaderboard((prev) => !prev)}
-                            aria-label={showLeaderboard ? "Hide leaderboard" : "Show leaderboard"}
-                            title={showLeaderboard ? "Hide leaderboard" : "Show leaderboard"}
-                        >
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                                aria-hidden="true"
-                                focusable="false"
-                            >
-                                <path
-                                    d="M8 21H16M12 17V21M7 4H17V6C17 9.31371 14.3137 12 11 12H13C9.68629 12 7 9.31371 7 6V4Z"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                                <path
-                                    d="M17 6H19C19 8.76142 16.7614 11 14 11"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                                <path
-                                    d="M7 6H5C5 8.76142 7.23858 11 10 11"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                            </svg>
-                        </button>
-                    </div>
-                    <div className="hero-card">
-                        <h3>Quick Search</h3>
-                        <input
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search by product name"
-                        />
-                        <button className="ghost" onClick={loadProducts} type="button">
-                            Search
-                        </button>
-                    </div>
-
-                    {currentUser && (
-                        <div className="hero-card">
-                            <h3>Your Trust Score</h3>
-                            <p className="muted" style={{ marginTop: 8 }}>
-                                {typeof gamification?.trustPoints === "number" ? (
-                                    <>
-                                        <strong style={{ color: "var(--rvce-navy)" }}>{gamification.trustPoints}</strong> points
-                                    </>
-                                ) : (
-                                    "Loading…"
-                                )}
-                            </p>
-                            <BadgesRow badges={gamification?.badges || []} />
-                        </div>
+            {createdListing && (
+                <div className={`status ${createdListing.verification_status === "approved" ? "success" : "info"}`}>
+                    {createdListing.verification_status === "approved" ? (
+                        <>
+                            ✅ Your listing is live: {createdListing.pname}.{" "}
+                            <Link to={`/product/${createdListing.pid}`}>View listing</Link>
+                        </>
+                    ) : (
+                        <>
+                            ⏳ Listing submitted for admin approval: {createdListing.pname}. You'll be notified once it's approved.
+                        </>
                     )}
                 </div>
+            )}
+
+            <header className="market-hero">
+                <div className="market-hero__main">
+                    <div>
+                        <h1>CampusKart</h1>
+                        <p className="subtext">
+                            Buy and sell within RV College of Engineering.
+                        </p>
+                        <div className="tab-row">
+                            <button
+                                className={view === "buy" ? "tab active" : "tab"}
+                                onClick={() => setView("buy")}
+                                type="button"
+                            >
+                                Buy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="search-panel">
+                        <h3>Search listings</h3>
+                        <div className="search-input-row">
+                            <input
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search books, gadgets, furniture…"
+                                autoFocus={view === "buy"}
+                                aria-label="Search listings"
+                            />
+                            <button className="primary" onClick={loadProducts} type="button">
+                                Search
+                            </button>
+                            {query && (
+                                <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={() => {
+                                        setQuery("");
+                                        loadProducts();
+                                    }}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                            {loading ? "Searching…" : `${sortedProducts.length} result(s) available`}
+                        </div>
+                    </div>
+                </div>
+
+                {view === "buy" && (
+                    <div className="market-hero__side hero-row">
+                        {currentUser && (
+                            <div className="hero-card hero-card--compact">
+                                <h3>Your Trust Score</h3>
+                                {typeof gamification?.trustPoints === "number" ? (
+                                    <>
+                                        <div className="trust-score-inline">
+                                            <span className="trust-score-value">
+                                                {gamification.trustPoints >= 100 ? "100+" : gamification.trustPoints}
+                                            </span>
+                                            <span className="muted">pts</span>
+                                        </div>
+                                        <div className="trust-meter" aria-hidden="true">
+                                            <span
+                                                style={{ width: `${Math.min(100, Math.max(0, gamification.trustPoints))}%` }}
+                                            />
+                                        </div>
+                                        <p className="muted" style={{ marginTop: 6 }}>
+                                            Higher trust boosts visibility.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
+                                )}
+                            </div>
+                        )}
+                        {currentUser && (
+                            <div className="hero-card hero-card--compact">
+                                <h3>My Badges</h3>
+                                {!gamification?.badges || gamification.badges.length === 0 ? (
+                                    <p className="muted" style={{ marginTop: 8 }}>No badges earned yet.</p>
+                                ) : (
+                                    <BadgesRow badges={gamification?.badges || []} />
+                                )}
+                            </div>
+                        )}
+                        <div className="hero-card hero-card--compact">
+                            <h3>Leaderboard</h3>
+                            {leaderboardError ? (
+                                <p className="muted" style={{ marginTop: 8 }}>{leaderboardError}</p>
+                            ) : leaderboard.length === 0 ? (
+                                <p className="muted" style={{ marginTop: 8 }}>No leaderboard data yet.</p>
+                            ) : (
+                                <div className="mini-leaderboard">
+                                    {leaderboard.slice(0, 3).map((u, idx) => (
+                                        <Link key={u.uid} to={`/seller/${u.uid}`} className="mini-leaderboard__item">
+                                            <span className="muted">#{idx + 1}</span>
+                                            <span className="mini-leaderboard__name">{u.name}</span>
+                                            <span className="mini-leaderboard__score">{u.trustPoints}</span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </header>
 
-            <div className={`leaderboard-collapse ${showBadges ? "is-open" : ""}`}>
-                <section className="grid">
-                    <div className="card">
-                        <div className="list-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                            <h2 style={{ margin: 0 }}>My Badges</h2>
-                            <span className="muted" style={{ fontSize: 12 }}>Achievement badges earned</span>
-                        </div>
-
-                        {!gamification?.badges || gamification.badges.length === 0 ? (
-                            <p className="muted" style={{ marginTop: 12 }}>No badges earned yet. Keep trading to unlock achievements!</p>
-                        ) : (
-                            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                                {gamification.badges.map((badge) => (
-                                    <div
-                                        key={badge.key}
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 12,
-                                            padding: "12px 14px",
-                                            border: "1px solid var(--rvce-border)",
-                                            borderRadius: 14,
-                                            background: "rgba(255,255,255,0.7)",
-                                        }}
-                                    >
-                                        <span style={{ fontSize: 32 }} aria-hidden="true">{badge.icon}</span>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: 700, color: "var(--rvce-navy)" }}>{badge.name}</div>
-                                            <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{badge.description}</div>
-                                            {badge.earnedAt && (
-                                                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                                    Earned: {new Date(badge.earnedAt).toLocaleDateString()}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </section>
-            </div>
-
-            <div className={`leaderboard-collapse ${showLeaderboard ? "is-open" : ""}`}>
-                <section className="grid">
-                    <div className="card">
-                        <div className="list-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                            <h2 style={{ margin: 0 }}>Leaderboard</h2>
-                            <span className="muted" style={{ fontSize: 12 }}>Top users by trust</span>
-                        </div>
-
-                        {leaderboardError ? (
-                            <p className="error">{leaderboardError}</p>
-                        ) : leaderboard.length === 0 ? (
-                            <p className="muted">No leaderboard data yet.</p>
-                        ) : (
-                            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                                {leaderboard.map((u, idx) => (
-                                    <Link
-                                        key={u.uid}
-                                        to={`/seller/${u.uid}`}
-                                        style={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                            gap: 12,
-                                            padding: "10px 12px",
-                                            border: "1px solid var(--rvce-border)",
-                                            borderRadius: 14,
-                                            background: "rgba(255,255,255,0.7)",
-                                            textDecoration: "none",
-                                            color: "inherit",
-                                            cursor: "pointer",
-                                            transition: "all 0.2s ease",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = "rgba(255,255,255,1)";
-                                            e.currentTarget.style.borderColor = "var(--rvce-navy)";
-                                            e.currentTarget.style.transform = "translateY(-2px)";
-                                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = "rgba(255,255,255,0.7)";
-                                            e.currentTarget.style.borderColor = "var(--rvce-border)";
-                                            e.currentTarget.style.transform = "translateY(0)";
-                                            e.currentTarget.style.boxShadow = "none";
-                                        }}
-                                    >
-                                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                            <span className="muted" style={{ width: 24, textAlign: "right" }}>#{idx + 1}</span>
-                                            <div>
-                                                <div style={{ fontWeight: 800, color: "var(--rvce-navy)" }}>{u.name}</div>
-                                                <div className="muted" style={{ fontSize: 12 }}>{u.email}</div>
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: "right" }}>
-                                            <div style={{ fontWeight: 800 }}>{u.trustPoints}</div>
-                                            <div className="muted" style={{ fontSize: 12 }}>{u.badgesCount} badge(s)</div>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </section>
-            </div>
 
             {view === "sell" ? (
                 <section className="grid">
@@ -565,25 +525,55 @@ export default function Home() {
                                 name="preferred_for"
                                 value={form.preferred_for}
                                 onChange={handleChange(setForm)}
+                                required
                             >
+                                <option value="" disabled>
+                                    Select preferred year
+                                </option>
                                 <option value="all">All</option>
                                 <option value="1st">1st</option>
                                 <option value="2nd">2nd</option>
                                 <option value="3rd">3rd</option>
                                 <option value="4th">4th</option>
                             </select>
-                            <input
-                                name="spec_name"
-                                placeholder="Specification name (optional)"
-                                value={form.spec_name}
-                                onChange={handleChange(setForm)}
-                            />
-                            <input
-                                name="spec_value"
-                                placeholder="Specification value (optional)"
-                                value={form.spec_value}
-                                onChange={handleChange(setForm)}
-                            />
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontWeight: 600 }}>Specifications</span>
+                                    <button type="button" className="ghost" onClick={addSpecRow}>
+                                        + Add specification
+                                    </button>
+                                </div>
+                                {specs.map((spec, index) => (
+                                    <div
+                                        key={`spec-${index}`}
+                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "1fr 1fr auto",
+                                            gap: "0.5rem",
+                                            alignItems: "center",
+                                        }}
+                                    >
+                                        <input
+                                            placeholder="Specification name"
+                                            value={spec.spec_name}
+                                            onChange={(e) => updateSpecRow(index, "spec_name", e.target.value)}
+                                        />
+                                        <input
+                                            placeholder="Specification value"
+                                            value={spec.spec_value}
+                                            onChange={(e) => updateSpecRow(index, "spec_value", e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="ghost"
+                                            onClick={() => removeSpecRow(index)}
+                                            aria-label="Remove specification"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                             <input
                                 name="image_url"
                                 placeholder="Image URL or file name"
@@ -595,84 +585,110 @@ export default function Home() {
                     </div>
                 </section>
             ) : (
-                <section className="card list">
-                    {/* Search Filters */}
-                    <SearchFilters
-                        onFilterChange={handleFilterChange}
-                        onClear={handleClearFilters}
-                    />
+                <section className="market-layout">
+                    <aside className="market-filters">
+                        <SearchFilters
+                            onFilterChange={handleFilterChange}
+                            onClear={handleClearFilters}
+                        />
+                        <div className="filters-hint">
+                            Tip: Use filters to narrow down results quickly.
+                        </div>
+                    </aside>
 
-                    <div className="list-header" style={{ alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 auto' }}>
-                            <h2 style={{ marginBottom: '0.25rem' }}>{marketFilter === "cart" ? "Cart" : "Listings"}</h2>
-                            <span className="muted" style={{ fontSize: '0.9rem' }}>{listSubtitle}</span>
+                    <div className="market-results" ref={resultsRef}>
+                        <div className="results-header">
+                            <div>
+                                <h2 style={{ marginBottom: 4 }}>{marketFilter === "cart" ? "My Cart" : "Listings"}</h2>
+                                <span className="muted" style={{ fontSize: 13 }}>{listSubtitle}</span>
+                            </div>
+                            <div className="results-actions">
+                                {MARKET_FILTERS.map((filter) => (
+                                    <button
+                                        key={filter.value}
+                                        type="button"
+                                        className={marketFilter === filter.value ? "ghost active" : "ghost"}
+                                        onClick={() => setMarketFilter(filter.value)}
+                                    >
+                                        {filter.label}
+                                        {filter.value === "cart" && cartProducts.length > 0 && (
+                                            <span className="nav-dot nav-dot--corner" aria-label="Cart updates" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {MARKET_FILTERS.map((filter) => (
-                                <button
-                                    key={filter.value}
-                                    type="button"
-                                    className="ghost"
-                                    onClick={() => setMarketFilter(filter.value)}
-                                    style={{
-                                        borderColor: marketFilter === filter.value ? '#2563eb' : undefined,
-                                        color: marketFilter === filter.value ? '#2563eb' : undefined,
-                                        fontWeight: marketFilter === filter.value ? 600 : 400,
-                                    }}
-                                >
-                                    {filter.label}
-                                </button>
-                            ))}
+
+                        <div className="results-meta">
+                            <span>{loading ? "Searching…" : `Showing ${displayedProducts.length} of ${sortedProducts.length}`}</span>
+                            {query && <span className="chip">Search: {query}</span>}
                         </div>
-                    </div>
-                    {marketFilter === "cart" && !currentUser ? (
-                        <p className="muted">Log in to see items you have in cart.</p>
-                    ) : sortedProducts.length === 0 ? (
-                        <p className="muted">
-                            {marketFilter === "cart" ? "No items in cart." : "No available listings."}
-                        </p>
-                    ) : (
-                        <>
-                            {marketFilter === "cart" && (
-                                <div style={{
-                                    background: '#f8fafc',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '0.75rem',
-                                    padding: '1rem',
-                                    marginBottom: '1rem'
-                                }}>
-                                    <p style={{ margin: 0, fontWeight: 600 }}>Cart Summary</p>
-                                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
-                                        {sortedProducts.length} item(s) · ₹ {Number(cartValue || 0).toLocaleString('en-IN')}
-                                    </p>
+                        {currentUser && cartProducts.length > 0 && marketFilter !== "cart" && (
+                            <div className="status info" style={{ marginTop: '0.75rem' }}>
+                                You have reserved item(s). <button className="ghost" onClick={() => setMarketFilter("cart")}>View cart</button>
+                            </div>
+                        )}
+
+                        {marketFilter === "cart" && !currentUser ? (
+                            <div className="empty-state">
+                                <h3>Log in to view your cart</h3>
+                                <p>Your reserved items will appear here.</p>
+                            </div>
+                        ) : sortedProducts.length === 0 ? (
+                            <div className="empty-state">
+                                <h3>No listings found</h3>
+                                <p>Try a different keyword or remove filters.</p>
+                            </div>
+                        ) : (
+                            <>
+                                {marketFilter === "cart" && (
+                                    <div className="summary-card">
+                                        <p style={{ margin: 0, fontWeight: 600 }}>Cart Summary</p>
+                                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
+                                            {sortedProducts.length} item(s) · ₹ {Number(cartValue || 0).toLocaleString('en-IN')}
+                                        </p>
+                                        <div className="product-grid">
+                                            {displayedProducts.map((item) => (
+                                                <ProductCard
+                                                    key={item.pid}
+                                                    product={item}
+                                                    isInWishlist={wishlistItems.includes(item.pid)}
+                                                    onToggleWishlist={() => toggleWishlist(item.pid, item.pname)}
+                                                    marketFilter={marketFilter}
+                                                    isOwner={String(item.sellerid) === String(currentUser?.uid)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {marketFilter !== "cart" && (
                                     <div className="product-grid">
-                                        {sortedProducts.map((item) => (
+                                        {displayedProducts.map((item) => (
                                             <ProductCard
                                                 key={item.pid}
                                                 product={item}
                                                 isInWishlist={wishlistItems.includes(item.pid)}
                                                 onToggleWishlist={() => toggleWishlist(item.pid, item.pname)}
                                                 marketFilter={marketFilter}
+                                                isOwner={String(item.sellerid) === String(currentUser?.uid)}
+                                                highlight={createdListing?.pid === item.pid}
                                             />
                                         ))}
                                     </div>
-                                </div>
-                            )}
-                            {marketFilter !== "cart" && (
-                                <div className="product-grid">
-                                    {sortedProducts.map((item) => (
-                                        <ProductCard
-                                            key={item.pid}
-                                            product={item}
-                                            isInWishlist={wishlistItems.includes(item.pid)}
-                                            onToggleWishlist={() => toggleWishlist(item.pid, item.pname)}
-                                            marketFilter={marketFilter}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
+                                )}
+                                {marketFilter !== "cart" && displayedProducts.length < sortedProducts.length && (
+                                    <div className="load-more">
+                                        <button className="primary" type="button" onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}>
+                                            Load more listings
+                                        </button>
+                                        <span className="muted" style={{ fontSize: 12 }}>
+                                            Showing {displayedProducts.length} of {sortedProducts.length}
+                                        </span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </section>
             )}
 

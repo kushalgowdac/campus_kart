@@ -20,6 +20,11 @@ import chatsRouter from "./routes/chats.js";
 import otpRouter from "./routes/otpRoutes.js";
 import locationRouter from "./routes/locationRoutes.js";
 import gamificationRouter from "./routes/gamification.js";
+import adminAuthRouter from "./routes/adminAuth.js";
+import adminProductsRouter from "./routes/adminProducts.js";
+import adminUsersRouter from "./routes/adminUsers.js";
+import adminAnalyticsRouter from "./routes/adminAnalytics.js";
+import adminReportsRouter from "./routes/adminReports.js";
 import { authenticate } from "./middleware/auth.js";
 import { startOTPCleanup } from "./jobs/otpCleanup.js";
 
@@ -61,6 +66,11 @@ app.use("/api/chats", chatsRouter);
 app.use("/api/otp", otpRouter);
 app.use("/api/locations", locationRouter);
 app.use("/api/gamification", gamificationRouter);
+app.use("/api/admin", adminAuthRouter);
+app.use("/api/admin/products", adminProductsRouter);
+app.use("/api/admin/users", adminUsersRouter);
+app.use("/api/admin/analytics", adminAnalyticsRouter);
+app.use("/api/admin/reports", adminReportsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

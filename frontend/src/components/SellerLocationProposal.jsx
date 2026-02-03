@@ -58,6 +58,9 @@ const SellerLocationProposal = ({ product, onUpdate }) => {
         <div className="card" style={{ marginTop: '1rem', border: '1px solid #FF9800' }}>
             <h3>Propose Meeting Locations & Times</h3>
             <p>Select locations and specify a time (e.g. "2:00 PM today"):</p>
+            <p className="muted" style={{ marginTop: '0.5rem' }}>
+                Keep it public, well-lit, and easy to find for a quick handover.
+            </p>
 
             <div style={{ marginTop: '1rem' }}>
                 {AVAILABLE_LOCATIONS.map(location => {

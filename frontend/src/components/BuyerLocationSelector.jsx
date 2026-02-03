@@ -52,6 +52,9 @@ const BuyerLocationSelector = ({ product, onUpdate }) => {
         <div className="card" style={{ marginTop: '1rem', border: '1px solid #2196F3' }}>
             <h3>Select Meeting Location</h3>
             <p>Choose where you'd like to meet the seller:</p>
+            <div className="status info" style={{ marginTop: '0.75rem' }}>
+                Meet in a public, well-lit campus location and arrive on time.
+            </div>
 
             <div style={{ marginTop: '1rem' }}>
                 {locations.map(loc => (

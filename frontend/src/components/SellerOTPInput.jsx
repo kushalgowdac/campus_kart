@@ -53,6 +53,9 @@ const SellerOTPInput = ({ product, onUpdate }) => {
         <div className="card" style={{ marginTop: '1rem', border: '1px solid #2196F3' }}>
             <h3>Verify Buyer</h3>
             <p>Ask the buyer for the 6-digit OTP code to complete the sale.</p>
+            <div className="status warning" style={{ marginTop: '0.75rem' }}>
+                Enter the OTP only after you have handed over the product.
+            </div>
 
             <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <input
@@ -60,6 +63,7 @@ const SellerOTPInput = ({ product, onUpdate }) => {
                     placeholder="Enter 6-digit OTP"
                     value={otpInput}
                     onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
                     style={{ fontSize: '1.5rem', textAlign: 'center', letterSpacing: '5px' }}
                     required
                 />

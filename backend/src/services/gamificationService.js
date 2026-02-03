@@ -12,6 +12,7 @@ export const TRUST_POINTS = Object.freeze({
   RATING_GIVEN: 2,
   RATING_RECEIVED: 3,
   RATING_RECEIVED_BONUS_5STAR: 2,
+  RESERVATION_CANCEL_PENALTY: -5,
 });
 
 export const BADGES = Object.freeze({
@@ -19,6 +20,58 @@ export const BADGES = Object.freeze({
   TRUSTED_USER: "trusted_user",
   POWER_SELLER: "power_seller",
 });
+
+export const BADGE_CATALOG = Object.freeze([
+  {
+    key: "seller_first_sale",
+    name: "First Sale",
+    description: "Completed your first sale.",
+    icon: "🏷️",
+    category: "seller",
+  },
+  {
+    key: "seller_power",
+    name: "Power Seller",
+    description: "Completed 5+ sales.",
+    icon: "⚡",
+    category: "seller",
+  },
+  {
+    key: "seller_consistent",
+    name: "Consistent Seller",
+    description: "10+ sales in the last 60 days.",
+    icon: "📈",
+    category: "seller",
+  },
+  {
+    key: "buyer_first_purchase",
+    name: "First Purchase",
+    description: "Completed your first purchase.",
+    icon: "🛒",
+    category: "buyer",
+  },
+  {
+    key: "buyer_reliable",
+    name: "Reliable Buyer",
+    description: "5+ purchases with minimal cancellations.",
+    icon: "✅",
+    category: "buyer",
+  },
+  {
+    key: "buyer_low_dispute",
+    name: "Low Dispute",
+    description: "No disputes in the last 90 days.",
+    icon: "🧘",
+    category: "buyer",
+  },
+  {
+    key: "trusted_user",
+    name: "Trusted User",
+    description: "Reached 100+ trust points.",
+    icon: "🌟",
+    category: "transaction",
+  },
+]);
 
 const getDb = (db) => db || pool;
 
@@ -128,4 +181,78 @@ export const getLeaderboard = async ({ limit = 10, rvceDomain = null, db }) => {
   );
 
   return rows;
+};
+
+export const getAllBadges = async ({ db }) => {
+  const database = getDb(db);
+  const [rows] = await database.query(
+    "SELECT badge_key AS `key`, name, description, icon, created_at AS createdAt FROM badges ORDER BY badge_key ASC"
+  );
+  return rows;
+};
+
+const safeCount = async ({ query, params = [], db }) => {
+  try {
+    const database = getDb(db);
+    const [rows] = await database.query(query, params);
+    return Number(rows?.[0]?.c || 0);
+  } catch (err) {
+    if (err?.code === "ER_NO_SUCH_TABLE") return 0;
+    throw err;
+  }
+};
+
+export const resolveDynamicBadges = async ({ uid, db }) => {
+  const database = getDb(db);
+
+  const completedSales = await safeCount({
+    db: database,
+    query:
+      "SELECT COUNT(*) AS c FROM `transaction` t JOIN product_seller ps ON t.pid = ps.pid WHERE t.status = 'completed' AND ps.sellerid = ?",
+    params: [uid],
+  });
+
+  const completedSales60 = await safeCount({
+    db: database,
+    query:
+      "SELECT COUNT(*) AS c FROM `transaction` t JOIN product_seller ps ON t.pid = ps.pid WHERE t.status = 'completed' AND ps.sellerid = ? AND t.time_of_purchase >= DATE_SUB(NOW(), INTERVAL 60 DAY)",
+    params: [uid],
+  });
+
+  const completedPurchases = await safeCount({
+    db: database,
+    query:
+      "SELECT COUNT(*) AS c FROM `transaction` t WHERE t.status = 'completed' AND t.buyerid = ?",
+    params: [uid],
+  });
+
+  const preOtpCancels90 = await safeCount({
+    db: database,
+    query:
+      "SELECT COUNT(*) AS c FROM reservation_cancellations WHERE buyer_id = ? AND is_pre_otp = 1 AND created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)",
+    params: [uid],
+  });
+
+  const disputes90 = await safeCount({
+    db: database,
+    query:
+      "SELECT COUNT(*) AS c FROM disputes WHERE buyer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)",
+    params: [uid],
+  });
+
+  const trustPoints = await getTrustPoints({ uid, db: database });
+
+  const unlocked = [];
+
+  if (completedSales >= 1) unlocked.push("seller_first_sale");
+  if (completedSales >= 5) unlocked.push("seller_power");
+  if (completedSales60 >= 10) unlocked.push("seller_consistent");
+
+  if (completedPurchases >= 1) unlocked.push("buyer_first_purchase");
+  if (completedPurchases >= 5 && preOtpCancels90 <= 1) unlocked.push("buyer_reliable");
+  if (completedPurchases >= 1 && disputes90 === 0) unlocked.push("buyer_low_dispute");
+
+  if (trustPoints >= 100) unlocked.push("trusted_user");
+
+  return BADGE_CATALOG.filter((badge) => unlocked.includes(badge.key));
 };

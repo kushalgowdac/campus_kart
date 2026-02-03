@@ -1,13 +1,16 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { fetchProductById, addWishlist, reserveProduct, getLocations, rescheduleProduct, rejectReschedule, cancelReservation, fetchTransactions, createRating, fetchUserGamification, checkRatingStatus } from "../api";
+import { fetchProductById, addWishlist, reserveProduct, getLocations, rescheduleProduct, rejectReschedule, cancelReservation, fetchTransactions, createRating, fetchUserGamification, checkRatingStatus, fetchProductSpecs, fetchWishlist, removeWishlistItem, createDispute } from "../api";
 import { useAuth } from "../context/AuthContext";
 import BuyerOTPDisplay from "../components/BuyerOTPDisplay";
 import SellerOTPInput from "../components/SellerOTPInput";
 import SellerLocationProposal from "../components/SellerLocationProposal";
 import BuyerLocationSelector from "../components/BuyerLocationSelector";
 import BadgesRow from "../components/BadgesRow";
+import TransactionTimeline from "../components/TransactionTimeline";
+import { resolveImageUrl } from "../utils/images";
+import productPlaceholder from "../assets/product-placeholder.svg";
 
 export default function ProductDetails() {
     const { id } = useParams();
@@ -21,10 +24,15 @@ export default function ProductDetails() {
     const [selectedTime, setSelectedTime] = useState(null);
     const [tradeInfo, setTradeInfo] = useState(null);
     const [sellerGamification, setSellerGamification] = useState(null);
+    const [productSpecs, setProductSpecs] = useState([]);
     const [ratingForm, setRatingForm] = useState({ rating: 5, comment: "" });
     const [ratingSubmitting, setRatingSubmitting] = useState(false);
     const [alreadyRated, setAlreadyRated] = useState(false);
     const [existingRating, setExistingRating] = useState(null);
+    const [isInWishlist, setIsInWishlist] = useState(false);
+    const [wishlistLoading, setWishlistLoading] = useState(false);
+    const previousStatusRef = useRef(null);
+    const [heroImage, setHeroImage] = useState(productPlaceholder);
 
     useEffect(() => {
         const load = async () => {
@@ -39,6 +47,79 @@ export default function ProductDetails() {
         };
         load();
     }, [id]);
+
+    const user = currentUser;
+    const isBuyer = user?.uid === product?.reserved_by;
+    const isSeller = user?.uid === product?.sellerid;
+
+    useEffect(() => {
+        if (!product) return;
+
+        if (product.status === "sold") {
+            setStatus({ type: "success", message: "Transaction complete. Item sold." });
+            return;
+        }
+
+        if (status.message && product.status !== "reserved" && status.message.startsWith("Product reserved!")) {
+            setStatus({ type: "", message: "" });
+            return;
+        }
+
+        if (status.message && !product.reschedule_requested_by && status.message.startsWith("Reschedule requested!")) {
+            setStatus({ type: "", message: "" });
+        }
+    }, [product, status.message]);
+
+    useEffect(() => {
+        if (!product) return;
+        const previousStatus = previousStatusRef.current;
+        const previousInProgress = ["reserved", "location_proposed", "location_selected", "otp_generated"].includes(previousStatus);
+        const nowAvailable = product.status === "available" && !product.reserved_by;
+
+        if (isSeller && previousInProgress && nowAvailable) {
+            setStatus({ type: "info", message: "Reservation cancelled. The item is available again." });
+        }
+
+        previousStatusRef.current = product.status;
+    }, [product, isSeller]);
+
+    useEffect(() => {
+        const loadSpecs = async () => {
+            if (!product?.pid) return;
+            try {
+                const specs = await fetchProductSpecs(product.pid);
+                setProductSpecs(Array.isArray(specs) ? specs : []);
+            } catch {
+                setProductSpecs([]);
+            }
+        };
+        loadSpecs();
+    }, [product?.pid]);
+
+    useEffect(() => {
+        if (product?.img_url) {
+            setHeroImage(resolveImageUrl(product.img_url));
+        } else {
+            setHeroImage(productPlaceholder);
+        }
+    }, [product?.img_url]);
+
+    useEffect(() => {
+        const loadWishlistStatus = async () => {
+            if (!currentUser?.uid || !product?.pid) {
+                setIsInWishlist(false);
+                return;
+            }
+            try {
+                const items = await fetchWishlist(currentUser.uid);
+                const exists = Array.isArray(items) && items.some((item) => Number(item.pid) === Number(product.pid));
+                setIsInWishlist(exists);
+            } catch {
+                setIsInWishlist(false);
+            }
+        };
+        loadWishlistStatus();
+    }, [currentUser?.uid, product?.pid]);
 
     const refreshProduct = async () => {
         try {
@@ -140,11 +221,27 @@ export default function ProductDetails() {
     }, [product?.pid, product?.status, currentUser?.uid]);
 
     const handleWishlist = async () => {
+        if (!currentUser?.uid) {
+            alert("Please login to manage your wishlist.");
+            return;
+        }
+        if (!product?.pid) return;
+        if (wishlistLoading) return;
+        setWishlistLoading(true);
         try {
-            await addWishlist({ uid: currentUser.uid, pid: product.pid });
-            setStatus({ type: "success", message: "Added to wishlist" });
+            if (isInWishlist) {
+                await removeWishlistItem(currentUser.uid, product.pid);
+                setIsInWishlist(false);
+                setStatus({ type: "success", message: "Removed from wishlist" });
+            } else {
+                await addWishlist({ uid: currentUser.uid, pid: product.pid });
+                setIsInWishlist(true);
+                setStatus({ type: "success", message: "Added to wishlist" });
+            }
         } catch (err) {
             setStatus({ type: "error", message: err.message });
+        } finally {
+            setWishlistLoading(false);
         }
     };
 
@@ -157,7 +254,7 @@ export default function ProductDetails() {
 
         try {
             await reserveProduct(product.pid);
-            setStatus({ type: "success", message: "Product reserved! Proceed to meet the seller." });
+            setStatus({ type: "success", message: "Product reserved! Waiting for the seller to propose meeting locations." });
             refreshProduct();
         } catch (err) {
             setStatus({ type: "error", message: err.message });
@@ -222,12 +319,59 @@ export default function ProductDetails() {
         }
     };
 
+    const getCancelReason = () => {
+        const choice = window.prompt(
+            "Why are you cancelling?\n1) Changed mind\n2) Bad product condition\n3) Seller late / no show\n\nEnter 1, 2, or 3"
+        );
+        if (!choice) return null;
+        if (choice.trim() === "2") return "bad_condition";
+        if (choice.trim() === "3") return "seller_late";
+        return "changed_mind";
+    };
+
     const handleCancelReservation = async () => {
-        if (!window.confirm("Are you sure you want to CANCEL this entire reservation? This cannot be undone.")) return;
+        if (!window.confirm("Are you sure you want to cancel this transaction? This cannot be undone.")) return;
+        const reason = getCancelReason();
+        if (!reason) return;
         try {
-            await cancelReservation(product.pid);
-            setStatus({ type: "success", message: "Reservation cancelled." });
+            await cancelReservation(product.pid, { reason });
+            setStatus({ type: "success", message: "Transaction cancelled." });
             refreshProduct();
+        } catch (err) {
+            setStatus({ type: "error", message: err.message });
+        }
+    };
+
+    const handleReportIssue = async () => {
+        if (!currentUser || !product) return;
+        const isBuyer = product.reserved_by === currentUser.uid;
+        const isSeller = product.sellerid === currentUser.uid;
+        if (!isBuyer && !isSeller) return;
+        if (!['location_selected', 'otp_generated'].includes(product.status)) {
+            setStatus({ type: "error", message: "Reports can only be raised after the meeting is scheduled." });
+            return;
+        }
+
+        const promptText = isSeller
+            ? "What is the issue?\n1) Buyer late / no show\n2) Buyer unresponsive\n3) Other\n\nEnter 1, 2, or 3"
+            : "What is the issue?\n1) Bad product condition\n2) Seller late / no show\n3) Other\n\nEnter 1, 2, or 3";
+
+        const choice = window.prompt(promptText);
+        if (!choice) return;
+
+        let reason = "other";
+        if (isSeller) {
+            if (choice.trim() === "1") reason = "buyer_no_show";
+            else if (choice.trim() === "2") reason = "buyer_unresponsive";
+        } else {
+            if (choice.trim() === "1") reason = "bad_condition";
+            else if (choice.trim() === "2") reason = "seller_no_show";
+        }
+
+        const details = window.prompt("Add details (optional)") || "";
+        try {
+            await createDispute(product.pid, { reason, details });
+            setStatus({ type: "info", message: "Report submitted. Our team will review it." });
         } catch (err) {
             setStatus({ type: "error", message: err.message });
         }
@@ -236,10 +380,6 @@ export default function ProductDetails() {
     if (loading) return <div>Loading...</div>;
     if (error) return <div className="error">Error: {error}</div>;
     if (!product) return <div>Product not found</div>;
-
-    const user = currentUser;
-    const isBuyer = user?.uid === product?.reserved_by;
-    const isSeller = user?.uid === product?.sellerid;
 
     const completedBuyerId = tradeInfo?.buyerid;
     const completedSellerId = tradeInfo?.sellerid;
@@ -282,23 +422,89 @@ export default function ProductDetails() {
         }
     };
 
+    const showTimeline = ["reserved", "location_proposed", "location_selected", "otp_generated", "sold"].includes(product.status);
+
     return (
         <div className="page-content">
-            <button onClick={() => navigate(-1)} className="ghost" style={{ marginBottom: '1rem' }}>
-                &larr; Back
-            </button>
+            <header className="page-header">
+                <div>
+                    <button onClick={() => navigate(-1)} className="ghost" style={{ marginBottom: '1rem' }}>
+                        &larr; Back
+                    </button>
+                    <h1>Product Details</h1>
+                    <p className="subtext">Review listing details and complete your trade.</p>
+                </div>
+            </header>
 
             {status.message && (
                 <div className={`status ${status.type}`}>{status.message}</div>
             )}
+            {!status.message && product?.status === "reserved" && isBuyer && (
+                <div className="status info">
+                    Reservation confirmed. Waiting for the seller to propose locations.
+                </div>
+            )}
+            {!status.message && product?.status === "reserved" && isSeller && (
+                <div className="status info">
+                    Buyer reserved this item. Please propose meeting locations.
+                </div>
+            )}
+            {!status.message && product?.status === "location_proposed" && isBuyer && (
+                <div className="status info">
+                    Locations are ready. Please choose one to continue.
+                </div>
+            )}
+            {!status.message && product?.status === "location_proposed" && isSeller && (
+                <div className="status info">
+                    Waiting for buyer to choose a location and time.
+                </div>
+            )}
+            {!status.message && product?.status === "location_selected" && isBuyer && (
+                <div className="status info">
+                    Location confirmed. Generate OTP only at the meeting point.
+                </div>
+            )}
+            {!status.message && product?.status === "location_selected" && isSeller && (
+                <div className="status info">
+                    Location confirmed. Wait for the buyer to generate the OTP.
+                </div>
+            )}
+            {!status.message && product?.status === "otp_generated" && isBuyer && (
+                <div className="status warning">
+                    OTP is active. Share it only after receiving the product.
+                </div>
+            )}
+            {!status.message && product?.status === "otp_generated" && isSeller && (
+                <div className="status info">
+                    OTP generated. Verify it after handing over the product.
+                </div>
+            )}
+            {!status.message && product?.status === "sold" && (
+                <div className="status success">Transaction complete. Item sold.</div>
+            )}
 
-            <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            {showTimeline && (isBuyer || isSeller) && (
+                <div className="card" style={{ marginBottom: "1.5rem" }}>
+                    <h3 style={{ marginTop: 0 }}>Transaction Progress</h3>
+                    <p className="muted" style={{ marginTop: "0.25rem" }}>
+                        Follow the steps to complete your trade securely.
+                    </p>
+                    <TransactionTimeline status={product.status} />
+                </div>
+            )}
+
+            <div className="card detail-layout">
                 <div>
-                    {product.img_url ? (
-                        <img src={product.img_url} alt={product.pname} style={{ width: '100%', borderRadius: '8px' }} />
-                    ) : (
-                        <div className="thumb placeholder" style={{ width: '100%', height: '300px' }}>No Image</div>
-                    )}
+                    <img
+                        src={heroImage}
+                        alt={product.pname}
+                        style={{ width: '100%', borderRadius: '8px' }}
+                        onError={() => {
+                            if (heroImage !== productPlaceholder) {
+                                setHeroImage(productPlaceholder);
+                            }
+                        }}
+                    />
                 </div>
                 <div>
                     <h1>{product.pname}</h1>
@@ -306,6 +512,16 @@ export default function ProductDetails() {
                         <span className={`badge ${product.status}`}>{product.status}</span>
                         <h2 style={{ margin: 0 }}>₹ {product.price}</h2>
                     </div>
+                    {currentUser && String(product.sellerid) === String(currentUser.uid) && product.verification_status && product.verification_status !== "approved" && (
+                        <div
+                            className={`status ${product.verification_status === "rejected" ? "error" : product.verification_status === "flagged" ? "warning" : "info"}`}
+                            style={{ marginTop: '1rem' }}
+                        >
+                            {product.verification_status === "pending" && "⏳ This listing is waiting for admin approval. You'll be notified once it's approved."}
+                            {product.verification_status === "flagged" && "⚠️ This listing was flagged for review by admin. Please wait for an update."}
+                            {product.verification_status === "rejected" && "❌ This listing was rejected by admin. Please update the details and resubmit."}
+                        </div>
+                    )}
                     <p className="muted" style={{ marginTop: '0.5rem' }}>
                         Only 1 unit available per listing.
                     </p>
@@ -316,8 +532,18 @@ export default function ProductDetails() {
                     <p className="muted">
                         Seller: {product.seller_name}
                     </p>
+                    {isSeller && product.reserved_by && (
+                        <div className="status info" style={{ marginTop: '0.75rem' }}>
+                            Buyer: {product.buyer_name || "Buyer"}
+                            {product.buyer_trust_points != null && (
+                                <span style={{ marginLeft: '0.5rem' }}>
+                                    • Trust Score: {product.buyer_trust_points}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     {sellerGamification && (
-                        <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'rgba(76, 175, 80, 0.05)', borderRadius: '8px', border: '1px solid rgba(76, 175, 80, 0.2)' }}>
+                        <div className="seller-score">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '0.5rem' }}>
                                 <span style={{ fontSize: '0.9rem', color: '#4CAF50', fontWeight: 600 }}>🏆 Trust Score:</span>
                                 <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--rvce-navy)' }}>{sellerGamification.trustPoints}</span>
@@ -332,10 +558,18 @@ export default function ProductDetails() {
                         Preferred Year: {product.preferred_for}
                     </p>
 
-                    {/* Specs would ideally be a separate fetch or included. productController currently joins simple props but not full specs list.
-               The current controller does: LEFT JOIN (SELECT pid, MIN(img_url)...) but NOT specs.
-               So we might not see specs here yet unless we update the controller.
-           */}
+                    {productSpecs.length > 0 && (
+                        <div style={{ marginTop: '1rem' }}>
+                            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Specifications</p>
+                            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                                {productSpecs.map((spec) => (
+                                    <li key={`${spec.pid}-${spec.spec_name}`} className="muted" style={{ marginBottom: '0.25rem' }}>
+                                        <strong>{spec.spec_name}:</strong> {spec.spec_value}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     <div style={{ marginTop: '2rem' }}>
                         {/* Action Buttons Area */}
@@ -348,18 +582,43 @@ export default function ProductDetails() {
                                 ) : (
                                     product.sellerid === currentUser?.uid && <span className="muted">Your listed product</span>
                                 )}
-                                <button className="secondary" onClick={handleWishlist}>Add to Wishlist</button>
+                                {product.sellerid !== currentUser?.uid && (
+                                    <button className="secondary" onClick={handleWishlist} disabled={wishlistLoading}>
+                                        {isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+                                    </button>
+                                )}
+                                {currentUser && product.sellerid !== currentUser.uid && (
+                                    <p className="muted" style={{ margin: 0, alignSelf: "center" }}>
+                                        Reserving holds the item and starts the meetup flow.
+                                    </p>
+                                )}
                             </div>
                         )}
 
                         {/* 2. Reserved State - Seller proposes locations */}
                         {product.status === 'reserved' && currentUser && product.sellerid === currentUser.uid && !product.reschedule_requested_by && (
-                            <SellerLocationProposal product={product} onUpdate={refreshProduct} />
+                            <>
+                                <div className="status info" style={{ marginBottom: '1rem' }}>
+                                    Reservation received from {product.buyer_name || `Buyer ${product.reserved_by}`} for {product.pname}. Propose meeting locations below.
+                                </div>
+                                <SellerLocationProposal product={product} onUpdate={refreshProduct} />
+                            </>
                         )}
 
                         {/* 3. Location Proposed - Buyer selects location */}
                         {product.status === 'location_proposed' && currentUser && product.reserved_by === currentUser.uid && !product.reschedule_requested_by && (
-                            <BuyerLocationSelector product={product} onUpdate={refreshProduct} />
+                            <>
+                                <div className="status info" style={{ marginBottom: '1rem' }}>
+                                    Seller proposed meeting locations. Please choose one to continue.
+                                </div>
+                                <BuyerLocationSelector product={product} onUpdate={refreshProduct} />
+                            </>
+                        )}
+
+                        {product.status === 'location_proposed' && isSeller && !product.reschedule_requested_by && (
+                            <div className="status info" style={{ marginBottom: '1rem' }}>
+                                Waiting for buyer to choose a location and time.
+                            </div>
                         )}
 
                         {/* 4. Location Selected - Show selected location */}
@@ -371,6 +630,11 @@ export default function ProductDetails() {
                                     <p style={{ fontSize: '1.1rem', color: '#555', marginBottom: '0.5rem' }}>
                                         🕒 {selectedTime}
                                     </p>
+                                )}
+                                {isSeller && (
+                                    <div className="status info" style={{ marginTop: '0.75rem' }}>
+                                        Buyer confirmed the location. Please arrive on time and wait for the OTP.
+                                    </div>
                                 )}
                                 {currentUser && product.reserved_by === currentUser.uid && (
                                     <p className="muted">Ready to generate OTP below</p>
@@ -474,15 +738,28 @@ export default function ProductDetails() {
                             </div>
                         )}
 
-                        {/* 🔴 Cancel Transaction Option (Buyer Only) */}
-                        {product.reserved_by === currentUser.uid && (
+                        {/* Report Issue (Buyer or Seller) */}
+                        {(['location_selected', 'otp_generated'].includes(product.status) && currentUser && (product.sellerid === currentUser.uid || product.reserved_by === currentUser.uid)) && (
+                            <div className="card" style={{ marginTop: '1rem', border: '1px dashed #ef4444' }}>
+                                <h4 style={{ marginTop: 0 }}>Report an Issue</h4>
+                                <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                                    Use this if someone is late/no‑show or the item condition is not as described.
+                                </p>
+                                <button onClick={handleReportIssue} className="outline" style={{ color: '#ef4444', borderColor: '#ef4444' }}>
+                                    Report Issue
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 🔴 Cancel Transaction Option (Buyer Only, pre‑OTP) */}
+                        {product.reserved_by === currentUser.uid && product.status !== 'otp_generated' && (
                             <div style={{ marginTop: '2rem', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
                                 <button
                                     onClick={handleCancelReservation}
                                     className="outline"
                                     style={{ color: '#d32f2f', borderColor: '#d32f2f', fontSize: '0.9rem' }}
                                 >
-                                    🚫 Cancel Entire Transaction
+                                    🚫 Cancel Transaction (pre‑OTP)
                                 </button>
                             </div>
                         )}

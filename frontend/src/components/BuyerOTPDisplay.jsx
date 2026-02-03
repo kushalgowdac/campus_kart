@@ -5,8 +5,11 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
     const [otp, setOtp] = useState(null);
     const [expiresIn, setExpiresIn] = useState(null);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(false);
     const [showOtp, setShowOtp] = useState(false);
+    const [readyToGenerate, setReadyToGenerate] = useState(false);
+    const [acknowledgeReceipt, setAcknowledgeReceipt] = useState(false);
     const isLocationSelected = product.status === 'location_selected';
     const isOtpGenerated = product.status === 'otp_generated';
     const storageKey = useMemo(() => product?.pid ? `campuskart_otp_${product.pid}` : null, [product?.pid]);
@@ -63,8 +66,13 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
     };
 
     const handleConfirmMeet = async () => {
+        if (!readyToGenerate) {
+            setError('Please confirm you are at the meeting location and ready to exchange.');
+            return;
+        }
         setLoading(true);
         setError('');
+        setNotice('');
         try {
             const data = await confirmMeet(product.pid);
             if (data.otp) {
@@ -84,11 +92,24 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
         }
     };
 
+    const getCancelReason = () => {
+        const choice = window.prompt(
+            "Why are you cancelling?\n1) Changed mind\n2) Bad product condition\n3) Seller late / no show\n\nEnter 1, 2, or 3"
+        );
+        if (!choice) return null;
+        if (choice.trim() === "2") return "bad_condition";
+        if (choice.trim() === "3") return "seller_late";
+        return "changed_mind";
+    };
+
     const handleCancel = async () => {
-        if (!window.confirm('Are you sure you want to cancel the reservation?')) return;
+        if (!window.confirm('Are you sure you want to cancel this transaction?')) return;
+        const reason = getCancelReason();
+        if (!reason) return;
         setLoading(true);
+        setNotice('');
         try {
-            await cancelReservation(product.pid);
+            await cancelReservation(product.pid, { reason });
             clearStoredOtp();
             setOtp(null);
             setShowOtp(false);
@@ -115,6 +136,7 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
             setShowOtp(false);
             setOtp(null);
             setExpiresIn(null);
+            setAcknowledgeReceipt(false);
             if (!isLocationSelected) {
                 clearStoredOtp();
             }
@@ -124,12 +146,22 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
     }, [isOtpGenerated, isLocationSelected, storageKey]);
 
     useEffect(() => {
+        if (!isLocationSelected) {
+            setReadyToGenerate(false);
+        }
+    }, [isLocationSelected]);
+
+    useEffect(() => {
         if (expiresIn !== null && expiresIn <= 0) {
             clearStoredOtp();
         }
     }, [expiresIn]);
 
     const handleRevealOtp = () => {
+        if (!acknowledgeReceipt) {
+            setError('Please confirm you received and verified the product before revealing the OTP.');
+            return;
+        }
         if (!otp) {
             setError('OTP unavailable on this device. Please use the code you copied earlier or wait for it to expire.');
             return;
@@ -146,11 +178,22 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
             {isLocationSelected && (
                 <>
                     <h3>Step 3: Generate OTP</h3>
-                    <p>Location confirmed! Click below to generate your verification code.</p>
+                    <p>Location confirmed. Generate the OTP only when you are physically at the meeting point.</p>
+                    <div className="status warning" style={{ marginTop: '0.75rem' }}>
+                        ⚠️ Only generate the OTP when you are ready to exchange and have verified the item.
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={readyToGenerate}
+                            onChange={(e) => setReadyToGenerate(e.target.checked)}
+                        />
+                        <span className="muted">I am at the meeting location and ready to exchange.</span>
+                    </label>
                     <div className="actions">
                         <button
                             onClick={handleConfirmMeet}
-                            disabled={loading}
+                            disabled={loading || !readyToGenerate}
                             className="primary"
                         >
                             {loading ? 'Processing...' : 'Generate OTP for Exchange'}
@@ -161,16 +204,32 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
                             className="ghost"
                             style={{ color: 'red' }}
                         >
-                            Cancel Reservation
+                            Cancel Transaction
                         </button>
                     </div>
+                    <p className="muted" style={{ marginTop: '0.5rem' }}>
+                        Cancelling releases the item back to the marketplace.
+                    </p>
                 </>
             )}
 
             {isOtpGenerated && (
                 <>
                     <h3 style={{ color: '#4CAF50' }}>Exchange OTP</h3>
-                    <p>Show this code to the seller to complete the purchase</p>
+                    <p>Share this code only after you receive and verify the product.</p>
+
+                    <div className="status warning" style={{ marginTop: '0.75rem' }}>
+                        Never share the OTP before receiving the product. Sharing it finalizes the sale.
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={acknowledgeReceipt}
+                            onChange={(e) => setAcknowledgeReceipt(e.target.checked)}
+                        />
+                        <span className="muted">I have received and verified the product.</span>
+                    </label>
 
                     {showOtp && otp ? (
                         <div style={{ margin: '1.5rem 0' }}>
@@ -178,14 +237,14 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
                                 {otp}
                             </div>
                             {expiresIn > 0 ? (
-                                <p className="muted">Expires in: {Math.floor(expiresIn / 60)}:{(expiresIn % 60).toString().padStart(2, '0')}</p>
+                                    <p className="muted">Expires in: {Math.floor(expiresIn / 60)}:{(expiresIn % 60).toString().padStart(2, '0')}</p>
                             ) : (
                                 <p style={{ color: 'red' }}>OTP Expired. Please refresh.</p>
                             )}
                         </div>
                     ) : (
                         <div style={{ margin: '1rem' }}>
-                            <button onClick={handleRevealOtp} className="secondary" disabled={!otp}>
+                                <button onClick={handleRevealOtp} className="secondary" disabled={!otp || !acknowledgeReceipt}>
                                 Reveal OTP
                             </button>
                             {!otp && (
@@ -197,17 +256,14 @@ const BuyerOTPDisplay = ({ product, onUpdate }) => {
                     )}
 
                     <div className="actions" style={{ justifyContent: 'center' }}>
-                        <button
-                            onClick={handleCancel}
-                            className="ghost"
-                            style={{ color: '#666' }}
-                        >
-                            Cancel Exchange
-                        </button>
+                        <span className="muted" style={{ fontSize: '0.9rem' }}>
+                            If there is a problem, use the Report Issue button in the transaction section.
+                        </span>
                     </div>
                 </>
             )}
 
+            {notice && <div className="status info" style={{ marginTop: '0.75rem' }}>{notice}</div>}
             {error && <div className="error">{error}</div>}
         </div>
     );

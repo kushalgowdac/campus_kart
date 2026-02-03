@@ -9,6 +9,7 @@ import {
   reserveProduct,
   confirmMeet,
   cancelReservation,
+  createDispute,
   rescheduleProduct,
   rejectReschedule,
 } from "../controllers/productsController.js";
@@ -32,6 +33,7 @@ router.post("/test", (req, res) => {
 router.post("/:id/reserve", reserveProduct);
 router.post("/:id/confirm-meet", confirmMeet);
 router.post("/:id/cancel", cancelReservation);
+router.post("/:id/dispute", createDispute);
 router.post("/:id/reschedule", rescheduleProduct);
 router.post("/:id/reschedule/reject", rejectReschedule);
 

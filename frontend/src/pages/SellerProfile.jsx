@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProducts } from "../api";
 import { useAuth } from "../context/AuthContext";
-import BadgesRow from "../components/BadgesRow";
+import { resolveImageUrl } from "../utils/images";
 
 export default function SellerProfile() {
     const { sellerId } = useParams();
@@ -53,7 +53,7 @@ export default function SellerProfile() {
 
     return (
         <div className="page-content">
-            <header className="hero">
+            <header className="page-header">
                 <div>
                     <Link to="/" className="ghost" style={{ marginBottom: 16, display: "inline-block" }}>
                         ← Back to Home
@@ -102,8 +102,8 @@ export default function SellerProfile() {
                                         to={`/product/${item.pid}`}
                                         style={{ textDecoration: "none", color: "inherit", display: "block", flex: 1 }}
                                     >
-                                        {item.img_url ? (
-                                            <img src={item.img_url} alt={item.pname} className="thumb" />
+                                            {item.img_url ? (
+                                                <img src={resolveImageUrl(item.img_url)} alt={item.pname} className="thumb" />
                                         ) : (
                                             <div className="thumb placeholder">No image</div>
                                         )}
@@ -119,18 +119,22 @@ export default function SellerProfile() {
                                         </div>
                                     </Link>
 
-                                    <div className="item-actions" style={{ padding: "0 1rem 1rem" }}>
-                                        <div className="item-meta" style={{ marginBottom: "0.5rem" }}>
+                                    <div className="item-actions" style={{ padding: "0 1rem 0.5rem" }}>
+                                        <div className="item-meta" style={{ marginBottom: 0 }}>
                                             <span className={`badge ${item.status}`}>{item.status}</span>
                                             <p>₹ {item.price}</p>
                                         </div>
+                                    </div>
+                                    <div style={{ padding: "0 1rem 1rem" }}>
                                         <Link
                                             to={`/product/${item.pid}`}
                                             className="ghost"
                                             style={{
                                                 textDecoration: "none",
-                                                padding: "0.5rem 1rem",
-                                                display: "inline-block"
+                                                padding: "0.35rem 0.75rem",
+                                                display: "inline-block",
+                                                fontSize: "0.85rem",
+                                                lineHeight: 1.2
                                             }}
                                         >
                                             View Details

@@ -7,10 +7,16 @@ import { TRUST_POINTS, addTrustPoints, computeAndAwardBadges } from "../services
 export const listProducts = async (req, res, next) => {
   try {
     const { category, sellerid, status, q } = req.query;
+    const viewerId = req.headers["x-user-id"];
+    const isSellerView = sellerid && viewerId && String(sellerid) === String(viewerId);
 
     let sql =
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p INNER JOIN product_seller ps ON p.pid = ps.pid INNER JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
+      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, ps.sellerid, u.name AS seller_name, bu.name AS buyer_name, pv.status AS verification_status, pi.img_url FROM products p INNER JOIN product_seller ps ON p.pid = ps.pid INNER JOIN users u ON ps.sellerid = u.uid LEFT JOIN users bu ON p.reserved_by = bu.uid LEFT JOIN product_verification pv ON p.pid = pv.product_id LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE 1=1";
     const params = [];
+
+    if (!isSellerView) {
+      sql += " AND (pv.status = 'approved' OR pv.status IS NULL)";
+    }
 
     if (category) {
       sql += " AND p.category = ?";
@@ -38,7 +44,7 @@ export const listProducts = async (req, res, next) => {
 
 export const searchProducts = async (req, res, next) => {
   try {
-    const { category, sortPrice } = req.query;
+    const { category, sortPrice, q } = req.query;
 
     // Validate sortPrice if provided
     if (sortPrice && !['asc', 'desc'].includes(sortPrice)) {
@@ -62,12 +68,14 @@ export const searchProducts = async (req, res, next) => {
         u.name AS seller_name,
         u.email AS seller_email,
         u.trust_points,
+        pv.status AS verification_status,
         pi.img_url 
       FROM products p
       INNER JOIN product_seller ps ON p.pid = ps.pid
       INNER JOIN users u ON ps.sellerid = u.uid
+      LEFT JOIN product_verification pv ON p.pid = pv.product_id
       LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid
-      WHERE 1=1
+      WHERE (pv.status = 'approved' OR pv.status IS NULL)
     `;
 
     const params = [];
@@ -77,6 +85,10 @@ export const searchProducts = async (req, res, next) => {
       sql += " AND p.category = ?";
       params.push(category);
     }
+    if (q) {
+      sql += " AND p.pname LIKE ?";
+      params.push(`%${q}%`);
+    }
 
     // Apply sorting
     if (sortPrice === 'asc') {
@@ -84,7 +96,7 @@ export const searchProducts = async (req, res, next) => {
     } else if (sortPrice === 'desc') {
       sql += " ORDER BY p.price DESC";
     } else {
-      sql += " ORDER BY p.created_at DESC"; // Default: newest first
+      sql += " ORDER BY p.pid DESC"; // Default: newest first by ID
     }
 
     const [rows] = await pool.query(sql, params);
@@ -97,10 +109,18 @@ export const searchProducts = async (req, res, next) => {
 export const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [rows] = await pool.query(
-      "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, p.reschedule_requested_by, ps.sellerid, u.name AS seller_name, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?",
-      [id]
-    );
+    const viewerId = req.headers["x-user-id"];
+    let sql = "SELECT p.pid, p.pname, p.category, p.price, p.status, p.bought_year, p.preferred_for, p.no_of_copies, p.reserved_by, p.reserved_at, p.reschedule_requested_by, ps.sellerid, u.name AS seller_name, bu.name AS buyer_name, bu.trust_points AS buyer_trust_points, pv.status AS verification_status, pi.img_url FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid LEFT JOIN users u ON ps.sellerid = u.uid LEFT JOIN users bu ON p.reserved_by = bu.uid LEFT JOIN product_verification pv ON p.pid = pv.product_id LEFT JOIN (SELECT pid, MIN(img_url) AS img_url FROM prod_img GROUP BY pid) pi ON p.pid = pi.pid WHERE p.pid = ?";
+    const params = [id];
+
+    if (viewerId) {
+      sql += " AND (pv.status = 'approved' OR pv.status IS NULL OR ps.sellerid = ?)";
+      params.push(viewerId);
+    } else {
+      sql += " AND (pv.status = 'approved' OR pv.status IS NULL)";
+    }
+
+    const [rows] = await pool.query(sql, params);
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -160,6 +180,11 @@ export const createProduct = async (req, res, next) => {
       );
     }
 
+    await connection.query(
+      "INSERT INTO product_verification (product_id, status, seller_trust_score) VALUES (?, 'pending', (SELECT trust_points FROM users WHERE uid = ?))",
+      [result.insertId, sellerid]
+    );
+
     await connection.commit();
 
     // Best-effort trust score update for the seller.
@@ -187,6 +212,7 @@ export const createProduct = async (req, res, next) => {
       no_of_copies: no_of_copies ?? 1,
       sellerid: sellerid || null,
       image_url: image_url || null,
+      verification_status: "pending",
     });
   } catch (err) {
     await connection.rollback();
@@ -323,6 +349,18 @@ export const reserveProduct = async (req, res, next) => {
     if (product.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: "Product not found" });
+    }
+
+    const [sellerRows] = await connection.query(
+      "SELECT sellerid FROM product_seller WHERE pid = ?",
+      [id]
+    );
+
+    if (sellerRows.length > 0 && Number(sellerRows[0].sellerid) === Number(buyerId)) {
+      await connection.rollback();
+      return res
+        .status(400)
+        .json({ error: "You cannot reserve your own product" });
     }
 
     if (product[0].status !== "available") {
@@ -475,6 +513,7 @@ export const cancelReservation = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user?.uid;
+    const { reason } = req.body || {};
 
     if (!userId) {
       return res.status(401).json({ error: "Authentication required" });
@@ -495,11 +534,40 @@ export const cancelReservation = async (req, res, next) => {
       return res.status(400).json({ error: "Product already sold. Reservation cannot be cancelled." });
     }
 
+    if (status === 'otp_generated') {
+      return res.status(400).json({ error: "OTP already generated. Please raise a dispute if there is an issue." });
+    }
+
     if (userId !== reserved_by && userId !== sellerid) {
       return res.status(403).json({ error: "Unauthorized: Only buyer or seller can cancel" });
     }
 
     await connection.beginTransaction();
+
+    const isBuyer = userId === reserved_by;
+    const isSeller = userId === sellerid;
+    const preOtpStages = ['reserved', 'location_proposed', 'location_selected'];
+    const isPreOtpCancel = preOtpStages.includes(status);
+
+    const normalizedReason = String(reason || "").trim() || (isBuyer ? "changed_mind" : "seller_cancelled");
+    const sellerFaultReasons = new Set(["bad_condition", "seller_late", "seller_no_show"]);
+    const isSellerFault = isBuyer && sellerFaultReasons.has(normalizedReason);
+
+    // Track cancellation before resetting state
+    await connection.query(
+      "INSERT INTO reservation_cancellations (pid, buyer_id, seller_id, cancelled_by, stage, is_pre_otp, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, reserved_by, sellerid, userId, status, isPreOtpCancel ? 1 : 0, normalizedReason]
+    );
+
+    // Apply penalty to the at-fault party (buyer cancels for own reason, or seller at fault)
+    let penaltyAppliedTo = null;
+    if (isBuyer && !isSellerFault) {
+      await addTrustPoints({ uid: reserved_by, delta: TRUST_POINTS.RESERVATION_CANCEL_PENALTY, db: connection });
+      penaltyAppliedTo = "buyer";
+    } else if (isSellerFault || isSeller) {
+      await addTrustPoints({ uid: sellerid, delta: TRUST_POINTS.RESERVATION_CANCEL_PENALTY, db: connection });
+      penaltyAppliedTo = "seller";
+    }
 
     // Mark active OTPs as used/invalid
     await connection.query(
@@ -525,7 +593,11 @@ export const cancelReservation = async (req, res, next) => {
     }
 
     await connection.commit();
-    res.json({ message: "Reservation cancelled" });
+    res.json({
+      message: "Transaction cancelled",
+      penaltyAppliedTo,
+      reason: normalizedReason,
+    });
 
   } catch (err) {
     await connection.rollback();
@@ -636,6 +708,62 @@ export const rescheduleProduct = async (req, res, next) => {
 
   } catch (err) {
     console.error("[Reschedule] Error:", err);
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+};
+
+export const createDispute = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const userId = req.user?.uid;
+    const { reason, details, evidence_url } = req.body || {};
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    if (!reason || String(reason).trim().length < 3) {
+      return res.status(400).json({ error: "Reason is required" });
+    }
+
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query(
+      "SELECT p.status, p.reserved_by, ps.sellerid FROM products p LEFT JOIN product_seller ps ON p.pid = ps.pid WHERE p.pid = ? FOR UPDATE",
+      [id]
+    );
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const { status, reserved_by, sellerid } = rows[0];
+    if (!['location_selected', 'otp_generated'].includes(status)) {
+      await connection.rollback();
+      return res.status(400).json({ error: "Reports can only be raised after the meeting is scheduled." });
+    }
+
+    const isBuyer = userId === reserved_by;
+    const isSeller = userId === sellerid;
+    if (!isBuyer && !isSeller) {
+      await connection.rollback();
+      return res.status(403).json({ error: "Only the buyer or seller can report an issue." });
+    }
+
+    const raisedRole = isSeller ? "seller" : "buyer";
+
+    await connection.query(
+      "INSERT INTO disputes (pid, buyer_id, seller_id, raised_by, raised_role, status, reason, details, evidence_url) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)",
+      [id, reserved_by, sellerid, userId, raisedRole, String(reason).trim(), details || null, evidence_url || null]
+    );
+
+    await connection.commit();
+    res.json({ message: "Dispute created" });
+  } catch (err) {
     await connection.rollback();
     next(err);
   } finally {

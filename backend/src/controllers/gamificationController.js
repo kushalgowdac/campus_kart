@@ -3,9 +3,10 @@ import {
   TRUST_POINTS,
   addTrustPoints,
   computeAndAwardBadges,
-  getUserBadges,
   getTrustPoints,
   getLeaderboard,
+  resolveDynamicBadges,
+  BADGE_CATALOG,
 } from "../services/gamificationService.js";
 
 const RVCE_DOMAIN = "@rvce.edu.in";
@@ -16,7 +17,7 @@ export const getMe = async (req, res, next) => {
     if (!uid) return res.status(401).json({ error: "Authentication required" });
 
     const trustPoints = await getTrustPoints({ uid });
-    const badges = await getUserBadges({ uid });
+    const badges = await resolveDynamicBadges({ uid });
 
     res.json({ uid, trustPoints, badges });
   } catch (err) {
@@ -33,7 +34,7 @@ export const getUserGamification = async (req, res, next) => {
     }
 
     const trustPoints = await getTrustPoints({ uid });
-    const badges = await getUserBadges({ uid });
+    const badges = await resolveDynamicBadges({ uid });
 
     res.json({ uid, trustPoints, badges });
   } catch (err) {
@@ -51,7 +52,7 @@ export const trackLogin = async (req, res, next) => {
     await computeAndAwardBadges({ uid });
 
     const trustPoints = await getTrustPoints({ uid });
-    const badges = await getUserBadges({ uid });
+    const badges = await resolveDynamicBadges({ uid });
 
     res.json({ uid, trustPoints, badges });
   } catch (err) {
@@ -119,6 +120,14 @@ export const leaderboard = async (req, res, next) => {
         return res.status(200).json([]);
       }
     }
+  }
+};
+
+export const getBadgesCatalog = async (req, res, next) => {
+  try {
+    return res.json(BADGE_CATALOG);
+  } catch (err) {
+    return next(err);
   }
 };
 
