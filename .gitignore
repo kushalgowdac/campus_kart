@@ -34,5 +34,4 @@ yarn-error.log*
 Thumbs.db
 
 # Project specific
-images/*
-!images/.gitkeep
+# (images are now tracked for product listings)
